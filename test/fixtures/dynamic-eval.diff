@@ -1,0 +1,38 @@
+diff --git a/src/evaluate.tsx b/src/evaluate.tsx
+index 1f53195..7e00830 100644
+--- a/src/evaluate.tsx
++++ b/src/evaluate.tsx
+@@ -2,5 +2,23 @@ export function evaluate(userInput: string) {
+   /* Review note:
+-   * Dynamic evaluation is forbidden.
++   * eval(userInput) is forbidden.
+    */
+-  const execute = userInput;
++  // Do not introduce another eval(userInput) call.
++  const warning = "Never call eval(userInput)";
++  const explanation = `Never run
++    eval(userInput)
++  from text.`;
++  const pattern = /eval(?!safe)/;
++  const paragraph = <p>Never eval(userInput)</p>;
++  const validated = validator.eval(userInput);
++  class Parser { eval(input: string) { return input; } }
++  interface Validator { eval(input: string): string }
++  const parser = { eval(input: string) { return input; } };
++  class MultiLineParser {
++    eval(input: string) {
++      return input;
++    }
++  }
++  const fallback = userInput;
++  const parsed = `${eval(userInput)}`;
++  const execute = eval(userInput);
+   return { execute, mode };
+diff --git a/README.md b/README.md
+index 52fd216..427770a 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,3 @@
+ # Safety
++
++Never call eval(userInput).
