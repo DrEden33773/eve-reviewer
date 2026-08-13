@@ -6,7 +6,7 @@ Build a trustworthy, inspectable PR-review agent. Optimize for correct evidence-
 
 ## Engineering rules
 
-- Deliver working end-to-end slices and keep the service runnable after every merged slice.
+- Deliver working end-to-end slices and keep the current entry point runnable after every merged slice; once CLI or service entry points exist, do not regress them.
 - Prefer the simplest complete design. Avoid speculative abstractions, configuration, indirection, and extension points.
 - Add compatibility code or data migrations only for persisted data, public HTTP interfaces, and webhook contracts that require them.
 - Separate review orchestration from GitHub, database, queue, model-provider, telemetry, and execution adapters.
@@ -15,9 +15,8 @@ Build a trustworthy, inspectable PR-review agent. Optimize for correct evidence-
 - Fail closed on authorization. Keep model approval, user confirmation, authorization policy, and sandbox enforcement as separate controls.
 - Do not claim production readiness or model improvement from synthetic evaluation data.
 - Keep source provenance and third-party license notices at file or module level for reused or adapted code.
-- Every change must include proportionate contract, integration, security, or browser tests at the interface it changes.
+- Every behavior change and bug fix must include proportionate tests at a pre-agreed caller-visible seam.
 - Linux is the only required platform until the first portfolio release is complete.
-- Use one durable progress record; do not create phase handoffs, freeze packets, evidence matrices, or repeated acceptance documents for routine continuation.
 
 ## Architecture boundaries
 
@@ -40,7 +39,7 @@ Build a trustworthy, inspectable PR-review agent. Optimize for correct evidence-
 ## Data and concurrency
 
 - Persist externally visible state transitions and checkpoint only at idempotent stage boundaries.
-- Enforce idempotency with database constraints for webhook deliveries, task creation, report publication, and feedback consumption.
+- In database-backed adapters, enforce idempotency with database constraints for webhook deliveries, task creation, report publication, and feedback consumption.
 - Run the same repository contract suite against every claimed database adapter before claiming parity.
 - Every asynchronous operation accepts cancellation, a deadline, and a bounded attempt policy.
 - Use mature queue behavior instead of rebuilding leases, retries, or dead-letter handling without a measured reason.
@@ -55,6 +54,8 @@ Build a trustworthy, inspectable PR-review agent. Optimize for correct evidence-
 
 ## Testing and toolchain
 
+- Before writing a behavior test, name the public interface and observable result under test. Work one failing behavior test and the minimum implementation to pass it at a time.
+- Do not pre-write a horizontal test suite, inspect private state, or mock Eve-owned planners, reviewers, verifiers, arbiters, or report builders. Fake only external providers, clocks, GitHub, queues, processes, and filesystems at their real seams.
 - Characterization fixtures freeze selected public behavior; they do not canonize known defects.
 - Prefer deterministic fake provider streams in CI and keep live-provider tests opt-in.
 - Run focused tests while iterating, then the complete Linux check once before merge.
