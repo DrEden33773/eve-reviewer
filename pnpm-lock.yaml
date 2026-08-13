@@ -21,6 +21,21 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  apps/cli:
+    dependencies:
+      '@biomejs/biome':
+        specifier: 2.5.8
+        version: 2.5.8
+      '@eve-review-agent/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+
+  packages/core:
+    dependencies:
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
+
 packages:
 
   '@biomejs/biome@2.5.8':
@@ -273,6 +288,10 @@ packages:
 
   devlop@1.1.0:
     resolution: {integrity: sha512-RWmIqhcFf1lRYBvNmr7qTNuyCt/7/ns2jbpp1+PalgE/rDQcBT0fioSMUpJ93irlUhC5hrg4cYqe6U+0ImW0rA==}
+
+  diff@9.0.0:
+    resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
+    engines: {node: '>=0.3.1'}
 
   entities@4.5.0:
     resolution: {integrity: sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==}
@@ -668,6 +687,8 @@ snapshots:
   devlop@1.1.0:
     dependencies:
       dequal: 2.0.3
+
+  diff@9.0.0: {}
 
   entities@4.5.0: {}
 
