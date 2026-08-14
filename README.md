@@ -6,13 +6,15 @@ The product will remain independently testable and runnable through a headless C
 
 ## Current status
 
-The first merged slice provides a deterministic local review path for one representative unified diff. It validates that every current finding references an added line and emits a normalized JSON report.
+The current implementation provides a deterministic local review path with normalized old/new-side changes, explicit base/head source availability, source-owned evidence and per-file coverage.
 
 The current path is intentionally narrow:
 
 - it recognizes one JavaScript/TypeScript dynamic-code-evaluation rule through pinned Biome;
-- it requires complete post-change source for syntax-aware analysis;
-- it does not yet model old-side evidence or truthful per-file analyzer coverage; and
+- it classifies added, modified, deleted, renamed, binary and metadata-only files;
+- it can validate old- or new-side findings through the exported core use case, while the current Biome Adapter emits new-side findings only;
+- it reports `complete`, `partial` or `no-coverage` from explicit per-file analysis and source availability;
+- its Biome execution and local source loading are still synchronous and do not accept caller cancellation or deadlines; and
 - it has no Adam extension Adapter, model reviewer, persistence, GitHub integration, TUI or Web contribution.
 
 HTTP, an Eve-owned provider/runtime, queues, databases and a standalone dashboard are not planned for the first integrated path.
@@ -42,9 +44,9 @@ For another unified diff, call the current CLI entry with an explicit repository
 pnpm exec eve-reviewer --repository owner/repository --pull-request 123 --source-root path/to/post-change-tree path/to/change.diff
 ```
 
-The source root must contain the complete post-change files referenced by the diff. Output from this command is deterministic fixture evidence, not a claim of complete review coverage or production readiness. Diff-only syntax-aware review is not supported by the current slice.
+The source root supplies the post-change head files needed by the current syntax-aware analyzer. The report distinguishes analyzed files from unsupported, deleted, binary, metadata-only or unavailable content. Output from this command is deterministic fixture evidence, not a claim of production readiness. Diff-only syntax-aware review remains unsupported.
 
-The next behavior work will first make diff/snapshot, old/new-side evidence and coverage semantics truthful, then make analyzer execution asynchronous and cancellable. Each behavior slice requires separate authorization and publication steps.
+Making analyzer execution asynchronous, cancellable and deadline-aware requires a separately authorized behavior slice. Publication also requires separate authorization.
 
 Third-party parser and analyzer dependencies are recorded in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
