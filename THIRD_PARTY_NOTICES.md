@@ -1,6 +1,6 @@
 # Third-party notices
 
-Eve Review Agent depends on the following third-party packages for the deterministic local review path. No source from these projects is copied into this repository.
+Eve Reviewer depends on the following third-party packages for the deterministic local review path. No source from these projects is copied into this repository.
 
 | Package | Version | Purpose | License |
 | --- | --- | --- | --- |

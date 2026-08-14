@@ -1,6 +1,8 @@
+#!/usr/bin/env node
+
 import { readFileSync, statSync } from "node:fs";
 
-import { buildValidatedReport, MAX_DIFF_BYTES, parseUnifiedDiff } from "@eve-review-agent/core";
+import { buildValidatedReport, MAX_DIFF_BYTES, parseUnifiedDiff } from "@eve-reviewer/core";
 
 import { reviewWithBiome } from "./biome-reviewer.ts";
 
@@ -27,7 +29,7 @@ const sourceRoot = sourceRootIndex >= 0 ? args[sourceRootIndex + 1] : undefined;
 
 if (repository === undefined || pullRequestValue === undefined || diffPath === undefined) {
   process.stderr.write(
-    "Usage: review-diff --repository <owner/name> --pull-request <number> [--source-root <directory>] <diff-file>\n",
+    "Usage: eve-reviewer --repository <owner/name> --pull-request <number> [--source-root <directory>] <diff-file>\n",
   );
   process.exitCode = 2;
 } else {

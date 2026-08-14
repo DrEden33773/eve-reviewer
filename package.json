@@ -1,5 +1,5 @@
 {
-  "name": "eve-review-agent",
+  "name": "eve-reviewer",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,12 +16,13 @@
     "markdown:fix": "markdownlint-cli2 --fix \"**/*.md\" \"#node_modules\" \"#dist\" \"#coverage\"",
     "quality:check": "pnpm code:check && pnpm markdown:check && pnpm typecheck && pnpm test",
     "quality:fix": "pnpm code:fix && pnpm markdown:fix",
-    "review:fixture": "node apps/cli/src/main.ts --repository example/repository --pull-request 1 --source-root test/fixtures/source test/fixtures/dynamic-eval.diff",
+    "review:fixture": "eve-reviewer --repository example/repository --pull-request 1 --source-root test/fixtures/source test/fixtures/dynamic-eval.diff",
     "test": "node --test packages/core/test/*.test.ts apps/cli/test/*.test.ts",
     "typecheck": "tsc -b --pretty false"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
+    "@eve-reviewer/cli": "workspace:*",
     "@types/node": "24.13.3",
     "markdownlint-cli2": "0.23.2",
     "typescript": "7.0.2"

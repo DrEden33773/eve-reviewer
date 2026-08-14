@@ -11,6 +11,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.8
         version: 2.5.8
+      '@eve-reviewer/cli':
+        specifier: workspace:*
+        version: link:apps/cli
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -26,7 +29,7 @@ importers:
       '@biomejs/biome':
         specifier: 2.5.8
         version: 2.5.8
-      '@eve-review-agent/core':
+      '@eve-reviewer/core':
         specifier: workspace:*
         version: link:../../packages/core
 

@@ -98,7 +98,7 @@ test("reports stable usage when required arguments are missing", () => {
   assert.equal(result.stdout, "");
   assert.equal(
     result.stderr,
-    "Usage: review-diff --repository <owner/name> --pull-request <number> [--source-root <directory>] <diff-file>\n",
+    "Usage: eve-reviewer --repository <owner/name> --pull-request <number> [--source-root <directory>] <diff-file>\n",
   );
 });
 

@@ -1,10 +1,13 @@
 {
-  "name": "@eve-review-agent/cli",
+  "name": "@eve-reviewer/cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "eve-reviewer": "./src/main.ts"
+  },
   "dependencies": {
     "@biomejs/biome": "2.5.8",
-    "@eve-review-agent/core": "workspace:*"
+    "@eve-reviewer/core": "workspace:*"
   }
 }
