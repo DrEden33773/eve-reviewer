@@ -43,9 +43,30 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
       {
         repository: "acme/widgets",
         pullRequest: 17,
-        summary: "2 findings across 2 changed files; highest severity: critical.",
+        summary:
+          "2 findings across 2 changed files; coverage: partial; highest severity: critical.",
         risk: "critical",
-        filesReviewed: ["src/evaluate.tsx", "README.md"],
+        coverage: {
+          status: "partial",
+          files: [
+            {
+              oldPath: "src/evaluate.tsx",
+              newPath: "src/evaluate.tsx",
+              status: "modified",
+              baseSource: "unavailable",
+              headSource: "available",
+              analysis: { status: "analyzed", side: "new" },
+            },
+            {
+              oldPath: "README.md",
+              newPath: "README.md",
+              status: "modified",
+              baseSource: "unavailable",
+              headSource: "available",
+              analysis: { status: "not-analyzed", reason: "unsupported" },
+            },
+          ],
+        },
         reviewer: "deterministic-security",
         findings: [
           {
@@ -53,9 +74,7 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
             severity: "critical",
             title: "Dynamic code evaluation",
             explanation: "Code added by the change evaluates text as executable code.",
-            path: "src/evaluate.tsx",
-            line: 22,
-            evidence: `  const parsed = \`\${eval(userInput)}\`;`,
+            location: { side: "new", path: "src/evaluate.tsx", line: 22 },
             fixGuidance: "Replace eval with an explicit parser or an allow-listed operation map.",
             suggestedTests: "Exercise hostile and malformed input and assert it is never executed.",
             confidence: 0.95,
@@ -64,15 +83,14 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
               version: "2.5.8",
               ruleId: "lint/security/noGlobalEval",
             },
+            evidence: `  const parsed = \`\${eval(userInput)}\`;`,
           },
           {
             ruleId: "security/no-dynamic-eval",
             severity: "critical",
             title: "Dynamic code evaluation",
             explanation: "Code added by the change evaluates text as executable code.",
-            path: "src/evaluate.tsx",
-            line: 23,
-            evidence: "  const execute = eval(userInput);",
+            location: { side: "new", path: "src/evaluate.tsx", line: 23 },
             fixGuidance: "Replace eval with an explicit parser or an allow-listed operation map.",
             suggestedTests: "Exercise hostile and malformed input and assert it is never executed.",
             confidence: 0.95,
@@ -81,6 +99,7 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
               version: "2.5.8",
               ruleId: "lint/security/noGlobalEval",
             },
+            evidence: "  const execute = eval(userInput);",
           },
         ],
       },
@@ -345,9 +364,21 @@ test("ignores analyzer diagnostics outside the changed lines", () => {
     assert.deepEqual(JSON.parse(result.stdout), {
       repository: "acme/widgets",
       pullRequest: 17,
-      summary: "0 findings across 1 changed file; highest severity: none.",
+      summary: "0 findings across 1 changed file; coverage: complete; highest severity: none.",
       risk: "none",
-      filesReviewed: ["example.ts"],
+      coverage: {
+        status: "complete",
+        files: [
+          {
+            oldPath: "example.ts",
+            newPath: "example.ts",
+            status: "modified",
+            baseSource: "unavailable",
+            headSource: "available",
+            analysis: { status: "analyzed", side: "new" },
+          },
+        ],
+      },
       reviewer: "deterministic-security",
       findings: [],
     });
@@ -490,8 +521,7 @@ test("does not let source suppression comments hide a finding", () => {
         severity: "critical",
         title: "Dynamic code evaluation",
         explanation: "Code added by the change evaluates text as executable code.",
-        path: "suppressed.ts",
-        line: 2,
+        location: { side: "new", path: "suppressed.ts", line: 2 },
         evidence: "eval(userInput);",
         fixGuidance: "Replace eval with an explicit parser or an allow-listed operation map.",
         suggestedTests: "Exercise hostile and malformed input and assert it is never executed.",
@@ -508,7 +538,7 @@ test("does not let source suppression comments hide a finding", () => {
   }
 });
 
-test("rejects a source snapshot with too many changed files", () => {
+test("rejects a diff with too many changed files", () => {
   const cliPath = fileURLToPath(new URL("../src/main.ts", import.meta.url));
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "eve-review-cli-"));
   const sourceRoot = join(temporaryDirectory, "source");
@@ -543,7 +573,7 @@ test("rejects a source snapshot with too many changed files", () => {
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-source","message":"Source snapshot exceeds the 100-file limit."}\n',
+      '{"code":"invalid-diff","message":"Diff exceeds the 100-changed-file limit."}\n',
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });

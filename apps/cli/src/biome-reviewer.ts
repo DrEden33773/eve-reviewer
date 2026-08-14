@@ -12,7 +12,12 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import type { CandidateFinding, ParsedDiff, SourceSnapshotFile } from "@eve-reviewer/core";
+import type {
+  AnalyzedFile,
+  CandidateFinding,
+  ParsedDiff,
+  SourceSnapshotFile,
+} from "@eve-reviewer/core";
 
 const require = createRequire(import.meta.url);
 const biomeEntryPoint = require.resolve("@biomejs/biome/bin/biome");
@@ -45,7 +50,12 @@ interface AnalyzerSource {
 }
 
 export type DeterministicReviewResult =
-  | { ok: true; sources: SourceSnapshotFile[]; candidates: CandidateFinding[] }
+  | {
+      ok: true;
+      sources: SourceSnapshotFile[];
+      analyzedFiles: AnalyzedFile[];
+      candidates: CandidateFinding[];
+    }
   | {
       ok: false;
       error: {
@@ -118,10 +128,14 @@ function disableSourceSuppressions(source: string): string {
 
 function changedLocations(parsed: ParsedDiff): Map<string, Set<number>> {
   const locations = new Map<string, Set<number>>();
-  for (const line of parsed.addedLines) {
-    const lines = locations.get(line.path) ?? new Set<number>();
-    lines.add(line.line);
-    locations.set(line.path, lines);
+  for (const file of parsed.files) {
+    for (const line of file.lines) {
+      if (line.changed && line.location.side === "new") {
+        const lines = locations.get(line.location.path) ?? new Set<number>();
+        lines.add(line.location.line);
+        locations.set(line.location.path, lines);
+      }
+    }
   }
   return locations;
 }
@@ -132,7 +146,7 @@ function loadSources(
 ):
   | DeterministicReviewResult
   | { sources: SourceSnapshotFile[]; analyzerSources: AnalyzerSource[] } {
-  if (parsed.filesReviewed.length > maximumSourceFiles) {
+  if (parsed.files.length > maximumSourceFiles) {
     return fail("invalid-source", `Source snapshot exceeds the ${maximumSourceFiles}-file limit.`);
   }
 
@@ -150,7 +164,11 @@ function loadSources(
 
   let aggregateBytes = 0;
   try {
-    for (const path of parsed.filesReviewed) {
+    for (const file of parsed.files) {
+      const path = file.newPath;
+      if (path === null || changedLocations(parsed).has(path) === false) {
+        continue;
+      }
       const resolvedPath = resolveInside(sourceRootPath, path);
       if (resolvedPath === undefined) {
         return fail("invalid-source", `Source path is outside the source root: ${path}.`);
@@ -198,7 +216,7 @@ export function reviewWithBiome(parsed: ParsedDiff, sourceRoot: string): Determi
     return loaded;
   }
   if (loaded.analyzerSources.length === 0) {
-    return { ok: true, sources: loaded.sources, candidates: [] };
+    return { ok: true, sources: loaded.sources, analyzedFiles: [], candidates: [] };
   }
 
   const reportDirectory = mkdtempSync(join(tmpdir(), "eve-biome-review-"));
@@ -318,8 +336,7 @@ export function reviewWithBiome(parsed: ParsedDiff, sourceRoot: string): Determi
           severity: "critical",
           title: "Dynamic code evaluation",
           explanation: "Code added by the change evaluates text as executable code.",
-          path,
-          line: findingLine,
+          location: { side: "new", path, line: findingLine },
           fixGuidance: "Replace eval with an explicit parser or an allow-listed operation map.",
           suggestedTests: "Exercise hostile and malformed input and assert it is never executed.",
           confidence: 0.95,
@@ -331,8 +348,17 @@ export function reviewWithBiome(parsed: ParsedDiff, sourceRoot: string): Determi
         });
       }
     }
-    candidates.sort((left, right) => left.path.localeCompare(right.path) || left.line - right.line);
-    return { ok: true, sources: loaded.sources, candidates };
+    candidates.sort(
+      (left, right) =>
+        left.location.path.localeCompare(right.location.path) ||
+        left.location.line - right.location.line,
+    );
+    return {
+      ok: true,
+      sources: loaded.sources,
+      analyzedFiles: loaded.analyzerSources.map((source) => ({ side: "new", path: source.path })),
+      candidates,
+    };
   } finally {
     rmSync(reportDirectory, { recursive: true, force: true });
   }

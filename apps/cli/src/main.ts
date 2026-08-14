@@ -76,7 +76,8 @@ if (repository === undefined || pullRequestValue === undefined || diffPath === u
               pullRequest,
               reviewer: "deterministic-security",
               diff,
-              sources: review.sources,
+              sources: { base: [], head: review.sources },
+              analyzedFiles: review.analyzedFiles,
               candidates: review.candidates,
             });
 
