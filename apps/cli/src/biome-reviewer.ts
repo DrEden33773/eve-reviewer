@@ -12,7 +12,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import type { CandidateFinding, ParsedDiff, SourceSnapshotFile } from "@eve-review-agent/core";
+import type { CandidateFinding, ParsedDiff, SourceSnapshotFile } from "@eve-reviewer/core";
 
 const require = createRequire(import.meta.url);
 const biomeEntryPoint = require.resolve("@biomejs/biome/bin/biome");
