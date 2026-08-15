@@ -84,7 +84,7 @@ test("maps SIGINT and SIGTERM to typed cancellation and waits for analyzer clean
       assert.equal(Buffer.concat(stdout).toString("utf8"), "");
       assert.equal(
         Buffer.concat(stderr).toString("utf8"),
-        '{"code":"cancelled","stage":"execute","message":"The deterministic review was cancelled during analysis.","analyzer":{"tool":"biome","version":"2.5.8","profile":"deterministic-security","rules":["lint/security/noGlobalEval"]}}\n',
+        '{"kind":"eve-reviewer.review-result","payload":{"error":{"code":"cancelled","stage":"analyze"},"ok":false},"schemaVersion":1}\n',
       );
       await assert.rejects(
         access(analyzerDirectory),
@@ -155,7 +155,7 @@ test("cancels a blocked diff stream and closes the one-shot CLI", {
     assert.equal(exitCode, 1);
     assert.equal(
       Buffer.concat(stderr).toString("utf8"),
-      '{"code":"cancelled","stage":"start","message":"The deterministic review was cancelled while reading diff input."}\n',
+      '{"kind":"eve-reviewer.review-result","payload":{"error":{"code":"cancelled","stage":"start"},"ok":false},"schemaVersion":1}\n',
     );
   } finally {
     if (child.exitCode === null && child.signalCode === null) {

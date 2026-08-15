@@ -8,6 +8,31 @@ import {
 } from "./unified-diff.ts";
 
 export {
+  createInMemoryReviewAdapter,
+  type InMemoryReviewAdapterDependencies,
+  type InMemoryReviewPort,
+} from "./in-memory-adapter.ts";
+export {
+  type AnalyzerOutcomeEnvelope,
+  type ContractIssue,
+  type ContractRejection,
+  type DecodeAnalyzerOutcomeResult,
+  type DecodeReviewRequestResult,
+  type DecodeReviewResultResult,
+  type EncodeReviewResultResult,
+  type ReviewRequestEnvelope,
+  type ReviewResultEnvelope,
+  reviewContractV1,
+} from "./review-contract.ts";
+
+import {
+  type AnalyzerOutcomeEnvelope,
+  type ReviewRequestEnvelope,
+  type ReviewResultEnvelope,
+  reviewContractV1,
+} from "./review-contract.ts";
+
+export {
   type ChangedFile,
   type ChangedFileStatus,
   type DiffLine,
@@ -125,18 +150,6 @@ export interface ReviewReport {
   findings: ReviewFinding[];
 }
 
-export interface DeterministicReviewReport extends ReviewReport {
-  analyzer: AnalyzerDescriptor;
-}
-
-export interface DeterministicReviewInput {
-  repository: string;
-  pullRequest: number | null;
-  reviewer: string;
-  diff: ParsedDiff;
-  sources: ReviewSources;
-}
-
 export interface AnalyzerExecutionInput {
   profile: string;
   rules: string[];
@@ -214,88 +227,6 @@ export type ExecuteAnalyzer = (
   context: AnalyzerContext,
 ) => Promise<AnalyzerExecutionResult>;
 
-export type DeterministicReviewResult =
-  | { ok: true; report: DeterministicReviewReport }
-  | Exclude<ValidatedReportResult, { ok: true }>
-  | {
-      ok: false;
-      error: {
-        code: "analyzer-diagnostic";
-        stage: "analyze";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "analyzer-start-failed";
-        stage: "start";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-        cleanupIncomplete?: true;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "analyzer-execution-failed";
-        stage: "execute";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-        cleanupIncomplete?: true;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "invalid-analyzer-output";
-        stage: "validate-output";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "analyzer-cleanup-failed";
-        stage: "cleanup";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "analyzer-limit-exceeded";
-        stage: "execute";
-        resource: AnalyzerLimitedResource;
-        message: string;
-        analyzer: AnalyzerDescriptor;
-        cleanupIncomplete?: true;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "cancelled";
-        stage: "start" | "execute";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-        cleanupIncomplete?: true;
-      };
-    }
-  | {
-      ok: false;
-      error: {
-        code: "deadline-exceeded";
-        stage: "start" | "execute";
-        message: string;
-        analyzer: AnalyzerDescriptor;
-        cleanupIncomplete?: true;
-      };
-    };
-
 export type ValidatedReportResult =
   | { ok: true; report: ReviewReport }
   | { ok: false; error: { code: "invalid-diff"; message: string } }
@@ -345,6 +276,16 @@ type SourceMapResult =
 const MAX_SOURCE_FILE_BYTES = 1_000_000;
 const MAX_SOURCE_FILES = 100;
 const MAX_SOURCE_SNAPSHOT_BYTES = 5_000_000;
+
+function tightenedLimit(requested: number, maximum: number): number {
+  if (Number.isNaN(requested) || requested <= 0) {
+    return 0;
+  }
+  if (!Number.isFinite(requested)) {
+    return maximum;
+  }
+  return Math.min(Math.floor(requested), maximum);
+}
 
 function sourceMap(
   sources: ReviewSources,
@@ -484,6 +425,47 @@ function reportCoverage(files: FileCoverage[]): ReportCoverageStatus {
   return analyzedFiles === 0 ? "no-coverage" : "partial";
 }
 
+function reviewSummary(
+  findingCount: number,
+  fileCount: number,
+  coverage: ReportCoverageStatus,
+  risk: Severity | "none",
+): string {
+  const findingLabel = findingCount === 1 ? "finding" : "findings";
+  const fileLabel = fileCount === 1 ? "file" : "files";
+  return `${String(findingCount)} ${findingLabel} across ${String(fileCount)} changed ${fileLabel}; coverage: ${coverage}; highest severity: ${risk}.`;
+}
+
+function sourceConsistencyError(
+  diff: ParsedDiff,
+  sources: Map<string, string[]>,
+):
+  | {
+      code: "source-mismatch";
+      message: string;
+      source: EvidenceLocation;
+    }
+  | undefined {
+  for (const file of diff.files) {
+    for (const diffLine of file.lines) {
+      const source = sources.get(sourceKey(diffLine.location.side, diffLine.location.path));
+      if (source === undefined) {
+        continue;
+      }
+      const sourceLine = source[diffLine.location.line - 1];
+      if (sourceLine === undefined || sourceLine !== diffLine.content) {
+        const { side, path, line } = diffLine.location;
+        return {
+          code: "source-mismatch",
+          message: `Source snapshot does not match the diff at ${side} ${path}:${String(line)}.`,
+          source: diffLine.location,
+        };
+      }
+    }
+  }
+  return undefined;
+}
+
 function buildValidatedReportFromParsedDiff(
   input: Omit<ValidatedReportInput, "diff">,
   diff: ParsedDiff,
@@ -513,25 +495,9 @@ function buildValidatedReportFromParsedDiff(
     }
   }
 
-  for (const file of diff.files) {
-    for (const diffLine of file.lines) {
-      const source = sources.get(sourceKey(diffLine.location.side, diffLine.location.path));
-      if (source === undefined) {
-        continue;
-      }
-      const sourceLine = source[diffLine.location.line - 1];
-      if (sourceLine === undefined || sourceLine !== diffLine.content) {
-        const { side, path, line } = diffLine.location;
-        return {
-          ok: false,
-          error: {
-            code: "source-mismatch",
-            message: `Source snapshot does not match the diff at ${side} ${path}:${String(line)}.`,
-            source: diffLine.location,
-          },
-        };
-      }
-    }
+  const mismatch = sourceConsistencyError(diff, sources);
+  if (mismatch !== undefined) {
+    return { ok: false, error: mismatch };
   }
 
   const findings: ReviewFinding[] = [];
@@ -555,15 +521,13 @@ function buildValidatedReportFromParsedDiff(
   const files = diff.files.map((file) => coverageForFile(file, sources, input.analyzedFiles));
   const coverageStatus = reportCoverage(files);
   const risk = highestSeverity(input.candidates);
-  const findingLabel = input.candidates.length === 1 ? "finding" : "findings";
-  const fileLabel = files.length === 1 ? "file" : "files";
 
   return {
     ok: true,
     report: {
       repository: input.repository,
       pullRequest: input.pullRequest,
-      summary: `${input.candidates.length} ${findingLabel} across ${files.length} changed ${fileLabel}; coverage: ${coverageStatus}; highest severity: ${risk}.`,
+      summary: reviewSummary(input.candidates.length, files.length, coverageStatus, risk),
       risk,
       coverage: { status: coverageStatus, files },
       reviewer: input.reviewer,
@@ -580,447 +544,352 @@ export function buildValidatedReport(input: ValidatedReportInput): ValidatedRepo
   return buildValidatedReportFromParsedDiff(input, parsed.diff);
 }
 
-const deterministicAnalyzerProfile = "deterministic-security";
-const deterministicAnalyzerRule = "lint/security/noGlobalEval";
-const deterministicAnalyzerRules = [deterministicAnalyzerRule];
-const deterministicAnalyzerVersion = "2.5.8";
-const supportedSourceExtensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"];
-
-interface SarifResult {
-  ruleId?: unknown;
-  locations?: Array<{
-    physicalLocation?: {
-      artifactLocation?: { uri?: unknown };
-      region?: { startLine?: unknown };
-    };
-  }>;
+export interface AnalyzeReviewInput {
+  subject: ReviewRequestEnvelope["payload"]["subject"];
+  reviewer: string;
+  diff: ParsedDiff;
+  sources: ReviewSources;
 }
 
-interface SarifLog {
-  version?: unknown;
-  runs?: Array<{ results?: SarifResult[] }>;
+export type AnalyzeReview = (
+  input: AnalyzeReviewInput,
+  context: AnalyzerContext,
+) => Promise<unknown[]>;
+
+export interface ReviewUseCase {
+  review(request: unknown, context: AnalyzerContext): Promise<ReviewResultEnvelope>;
 }
 
-function supportedHeadSources(input: DeterministicReviewInput): SourceSnapshotFile[] {
-  const changedPaths = new Set(
-    input.diff.files.flatMap((file) =>
-      file.lines
-        .filter((line) => line.changed && line.location.side === "new")
-        .map((line) => line.location.path),
-    ),
-  );
-  return input.sources.head
-    .filter(
-      (source) =>
-        changedPaths.has(source.path) &&
-        supportedSourceExtensions.some((extension) =>
-          source.path.toLowerCase().endsWith(extension),
-        ),
-    )
-    .toSorted((left, right) => left.path.localeCompare(right.path));
-}
+type ReviewFailureError = Extract<ReviewResultEnvelope["payload"], { ok: false }>["error"];
 
-function candidatesFromSarif(
-  report: SarifLog,
-  execution: AnalyzerExecutionSuccess,
-  diff: ParsedDiff,
-):
-  | { ok: true; candidates: CandidateFinding[] }
-  | Extract<DeterministicReviewResult, { ok: false; error: { code: "analyzer-diagnostic" } }> {
-  const artifactPaths = new Map(
-    (execution.artifacts ?? []).map((artifact) => [artifact.uri, artifact.path]),
-  );
-  const changedLocations = new Set(
-    diff.files.flatMap((file) =>
-      file.lines
-        .filter((line) => line.changed && line.location.side === "new")
-        .map((line) => `${line.location.path}\0${String(line.location.line)}`),
-    ),
-  );
-  const reportedLocations = new Set<string>();
-  const candidates: CandidateFinding[] = [];
-  for (const run of report.runs ?? []) {
-    for (const result of run.results ?? []) {
-      if (typeof result.ruleId === "string" && result.ruleId !== deterministicAnalyzerRule) {
-        return {
-          ok: false,
-          error: {
-            code: "analyzer-diagnostic",
-            stage: "analyze",
-            message: `Biome reported diagnostic ${result.ruleId} outside the deterministic review profile.`,
-            analyzer: analyzerDescriptor(),
-          },
-        };
-      }
-      if (result.ruleId !== deterministicAnalyzerRule) {
-        throw new Error("Biome SARIF contains a diagnostic without a rule identifier.");
-      }
-      const location = result.locations?.[0]?.physicalLocation;
-      const uri = location?.artifactLocation?.uri;
-      const line = location?.region?.startLine;
-      if (typeof uri !== "string" || !Number.isSafeInteger(line) || Number(line) <= 0) {
-        throw new Error("Biome SARIF contains an invalid finding location.");
-      }
-      const path = artifactPaths.get(uri);
-      if (path === undefined) {
-        throw new Error("Biome SARIF references a file outside the snapshot.");
-      }
-      const findingLine = Number(line);
-      const findingLocation = `${path}\0${String(findingLine)}`;
-      if (!changedLocations.has(findingLocation) || reportedLocations.has(findingLocation)) {
-        continue;
-      }
-      reportedLocations.add(findingLocation);
-      candidates.push({
-        ruleId: "security/no-dynamic-eval",
-        severity: "critical",
-        title: "Dynamic code evaluation",
-        explanation: "Code added by the change evaluates text as executable code.",
-        location: { side: "new", path, line: findingLine },
-        fixGuidance: "Replace eval with an explicit parser or an allow-listed operation map.",
-        suggestedTests: "Exercise hostile and malformed input and assert it is never executed.",
-        confidence: 0.95,
-        provenance: {
-          tool: "biome",
-          version: deterministicAnalyzerVersion,
-          ruleId: deterministicAnalyzerRule,
-        },
-      });
-    }
-  }
+function versionedReviewFailure(error: ReviewFailureError): ReviewResultEnvelope {
   return {
-    ok: true,
-    candidates: candidates.toSorted(
-      (left, right) =>
-        left.location.path.localeCompare(right.location.path) ||
-        left.location.line - right.location.line,
-    ),
-  };
+    kind: "eve-reviewer.review-result" as const,
+    schemaVersion: 1 as const,
+    payload: { ok: false as const, error },
+  } as ReviewResultEnvelope;
 }
 
-function analyzerDescriptor(version = deterministicAnalyzerVersion): AnalyzerDescriptor {
-  return {
-    tool: "biome",
-    version,
-    profile: deterministicAnalyzerProfile,
-    rules: [...deterministicAnalyzerRules],
-  };
+function outcomeMatchesFile(
+  outcomeFile: AnalyzerOutcomeEnvelope["payload"]["files"][number],
+  coverage: Pick<FileCoverage, "oldPath" | "newPath">,
+): boolean {
+  return outcomeFile.side === "old"
+    ? coverage.oldPath === outcomeFile.path
+    : coverage.newPath === outcomeFile.path;
 }
 
-type RuntimeRecord = Record<string, unknown> & {
-  cleanupIncomplete?: unknown;
-  version?: unknown;
-  ok?: unknown;
-  exitCode?: unknown;
-  stdout?: unknown;
-  stderr?: unknown;
-  report?: unknown;
-  runs?: unknown;
-  artifacts?: unknown;
-  failure?: unknown;
-  message?: unknown;
-  resource?: unknown;
-  uri?: unknown;
-  path?: unknown;
-};
-
-function isRecord(value: unknown): value is RuntimeRecord {
-  return typeof value === "object" && value !== null;
+function analyzerIdentity(analyzer: AnalyzerDescriptor): string {
+  return JSON.stringify([analyzer.tool, analyzer.version, analyzer.profile, analyzer.rules]);
 }
 
-function hasValidCleanupFlag(value: RuntimeRecord): boolean {
-  return value.cleanupIncomplete === undefined || value.cleanupIncomplete === true;
+function compareAnalyzerIdentity(
+  left: AnalyzerOutcomeEnvelope,
+  right: AnalyzerOutcomeEnvelope,
+): number {
+  const leftIdentity = analyzerIdentity(left.payload.analyzer);
+  const rightIdentity = analyzerIdentity(right.payload.analyzer);
+  return leftIdentity < rightIdentity ? -1 : leftIdentity > rightIdentity ? 1 : 0;
 }
 
-function isAnalyzerExecutionResult(value: unknown): value is AnalyzerExecutionResult {
-  if (!isRecord(value) || typeof value.version !== "string" || !hasValidCleanupFlag(value)) {
-    return false;
+function matrixCoverageStatus(
+  files: Array<{ analyses: Array<{ status: "analyzed" | "skipped" | "failed" }> }>,
+): ReportCoverageStatus {
+  const analyses = files.flatMap((file) => file.analyses);
+  const analyzed = analyses.filter((analysis) => analysis.status === "analyzed").length;
+  if (
+    files.length > 0 &&
+    files.every((file) => file.analyses.length > 0) &&
+    analyzed === analyses.length
+  ) {
+    return "complete";
   }
-  if (value.ok === true) {
-    return (
-      (value.exitCode === 0 || value.exitCode === 1) &&
-      typeof value.stdout === "string" &&
-      typeof value.stderr === "string" &&
-      typeof value.report === "string" &&
-      (value.artifacts === undefined ||
-        (Array.isArray(value.artifacts) &&
-          value.artifacts.every(
-            (artifact) =>
-              isRecord(artifact) &&
-              typeof artifact.uri === "string" &&
-              typeof artifact.path === "string",
-          )))
-    );
-  }
-  if (value.ok !== false || typeof value.failure !== "string") {
-    return false;
-  }
-  switch (value.failure) {
-    case "start":
-      return typeof value.message === "string";
-    case "execution":
-      return (
-        typeof value.message === "string" &&
-        (value.exitCode === null || Number.isSafeInteger(value.exitCode))
-      );
-    case "cancelled":
-    case "deadline":
-    case "cleanup":
-      return true;
-    case "limit":
-      return (
-        value.resource === "stdout" || value.resource === "stderr" || value.resource === "report"
-      );
-    default:
-      return false;
-  }
+  return analyzed === 0 ? "no-coverage" : "partial";
 }
 
-export function createDeterministicReviewer(dependencies: {
-  executeAnalyzer: ExecuteAnalyzer;
+export function createReviewUseCase(dependencies: {
+  analyze: AnalyzeReview;
   clock: () => number;
-}): {
-  review(
-    input: DeterministicReviewInput,
-    context: AnalyzerContext,
-  ): Promise<DeterministicReviewResult>;
-} {
+}): ReviewUseCase {
   return {
-    async review(input, context) {
+    async review(request: unknown, context: AnalyzerContext) {
+      const decoded = reviewContractV1.decodeRequest(request);
+      if (!decoded.ok) {
+        return versionedReviewFailure(decoded.error);
+      }
       if (context.signal.aborted) {
-        return {
-          ok: false,
-          error: {
-            code: "cancelled",
-            stage: "start",
-            message: "The deterministic review was cancelled before analysis started.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
+        return versionedReviewFailure({ code: "cancelled", stage: "start" });
       }
-      if (context.deadline <= dependencies.clock()) {
-        return {
-          ok: false,
-          error: {
-            code: "deadline-exceeded",
-            stage: "start",
-            message: "The deterministic review deadline elapsed before analysis started.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
+      if (dependencies.clock() >= context.deadline) {
+        return versionedReviewFailure({ code: "deadline-exceeded", stage: "start" });
       }
-      const sourceValidation = sourceMap(input.sources, input.diff.files, {
-        maximumSourceFiles: Math.min(context.limits.maximumSourceFiles, MAX_SOURCE_FILES),
-        maximumSourceFileBytes: Math.min(
+      const parsed = parseUnifiedDiff(decoded.value.payload.diff);
+      if (!parsed.ok) {
+        return versionedReviewFailure(parsed.error);
+      }
+      const validatedSources = sourceMap(decoded.value.payload.sources, parsed.diff.files, {
+        maximumSourceFiles: tightenedLimit(context.limits.maximumSourceFiles, MAX_SOURCE_FILES),
+        maximumSourceFileBytes: tightenedLimit(
           context.limits.maximumSourceFileBytes,
           MAX_SOURCE_FILE_BYTES,
         ),
-        maximumSnapshotBytes: Math.min(
+        maximumSnapshotBytes: tightenedLimit(
           context.limits.maximumSnapshotBytes,
           MAX_SOURCE_SNAPSHOT_BYTES,
         ),
       });
-      if (!sourceValidation.ok) {
-        return sourceValidation;
+      if (!validatedSources.ok) {
+        return versionedReviewFailure(validatedSources.error);
       }
-      const sources = supportedHeadSources(input);
-      let execution: AnalyzerExecutionResult;
-      try {
-        execution = await dependencies.executeAnalyzer(
-          {
-            profile: deterministicAnalyzerProfile,
-            rules: [...deterministicAnalyzerRules],
-            sources,
-          },
-          context,
-        );
-      } catch {
-        return {
-          ok: false,
-          error: {
-            code: "analyzer-execution-failed",
-            stage: "execute",
-            message: "The analyzer adapter did not complete successfully.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
+      const mismatch = sourceConsistencyError(parsed.diff, validatedSources.sources);
+      if (mismatch !== undefined) {
+        return versionedReviewFailure(mismatch);
       }
-      if (!isAnalyzerExecutionResult(execution)) {
-        return {
-          ok: false,
-          error: {
-            code: "invalid-analyzer-output",
-            stage: "validate-output",
-            message: "The analyzer adapter returned an invalid result.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
+      if (context.signal.aborted) {
+        return versionedReviewFailure({ code: "cancelled", stage: "start" });
       }
-      if (execution.version !== deterministicAnalyzerVersion) {
-        return {
-          ok: false,
-          error: {
-            code: "invalid-analyzer-output",
-            stage: "validate-output",
-            message: "The analyzer provenance did not match the deterministic review profile.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
-      }
-      if (execution.ok && (execution as unknown as RuntimeRecord).cleanupIncomplete === true) {
-        return {
-          ok: false,
-          error: {
-            code: "analyzer-cleanup-failed",
-            stage: "cleanup",
-            message:
-              "The Biome analyzer completed, but its temporary resources could not be cleaned up.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
-      }
-      if (!execution.ok) {
-        if (execution.failure === "cancelled") {
-          return {
-            ok: false,
-            error: {
-              code: "cancelled",
-              stage: "execute",
-              message: "The deterministic review was cancelled during analysis.",
-              analyzer: analyzerDescriptor(),
-              ...(execution.cleanupIncomplete ? { cleanupIncomplete: true as const } : {}),
-            },
-          };
-        }
-        if (execution.failure === "deadline") {
-          return {
-            ok: false,
-            error: {
-              code: "deadline-exceeded",
-              stage: "execute",
-              message: "The deterministic review deadline elapsed during analysis.",
-              analyzer: analyzerDescriptor(),
-              ...(execution.cleanupIncomplete ? { cleanupIncomplete: true as const } : {}),
-            },
-          };
-        }
-        if (execution.failure === "cleanup") {
-          return {
-            ok: false,
-            error: {
-              code: "analyzer-cleanup-failed",
-              stage: "cleanup",
-              message:
-                "The Biome analyzer completed, but its temporary resources could not be cleaned up.",
-              analyzer: analyzerDescriptor(),
-            },
-          };
-        }
-        if (execution.failure === "limit") {
-          return {
-            ok: false,
-            error: {
-              code: "analyzer-limit-exceeded",
-              stage: "execute",
-              resource: execution.resource,
-              message: `The Biome analyzer exceeded the configured ${execution.resource} limit.`,
-              analyzer: analyzerDescriptor(),
-              ...(execution.cleanupIncomplete ? { cleanupIncomplete: true as const } : {}),
-            },
-          };
-        }
-        if (execution.failure === "execution") {
-          return {
-            ok: false,
-            error: {
-              code: "analyzer-execution-failed",
-              stage: "execute",
-              message: "The Biome analyzer did not complete successfully.",
-              analyzer: analyzerDescriptor(),
-              ...(execution.cleanupIncomplete ? { cleanupIncomplete: true as const } : {}),
-            },
-          };
-        }
-        return {
-          ok: false,
-          error: {
-            code: "analyzer-start-failed",
-            stage: "start",
-            message: "Unable to start the Biome analyzer.",
-            analyzer: analyzerDescriptor(),
-            ...(execution.cleanupIncomplete ? { cleanupIncomplete: true as const } : {}),
-          },
-        };
-      }
-      let untrustedReport: unknown;
-      try {
-        untrustedReport = JSON.parse(execution.report) as unknown;
-      } catch {
-        return {
-          ok: false,
-          error: {
-            code: "invalid-analyzer-output",
-            stage: "validate-output",
-            message: "Biome did not produce valid SARIF.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
-      }
-      if (
-        !isRecord(untrustedReport) ||
-        untrustedReport.version !== "2.1.0" ||
-        !Array.isArray(untrustedReport.runs)
-      ) {
-        return {
-          ok: false,
-          error: {
-            code: "invalid-analyzer-output",
-            stage: "validate-output",
-            message: "The Biome analyzer returned invalid SARIF output.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
-      }
-      const report = untrustedReport as unknown as SarifLog;
-      let mapped: ReturnType<typeof candidatesFromSarif>;
-      try {
-        mapped = candidatesFromSarif(report, execution, input.diff);
-      } catch {
-        return {
-          ok: false,
-          error: {
-            code: "invalid-analyzer-output",
-            stage: "validate-output",
-            message: "The Biome analyzer returned invalid SARIF output.",
-            analyzer: analyzerDescriptor(),
-          },
-        };
-      }
-      if (!mapped.ok) {
-        return mapped;
+      if (dependencies.clock() >= context.deadline) {
+        return versionedReviewFailure({ code: "deadline-exceeded", stage: "start" });
       }
 
-      const built = buildValidatedReportFromParsedDiff(
-        {
-          repository: input.repository,
-          pullRequest: input.pullRequest,
-          reviewer: input.reviewer,
-          sources: input.sources,
-          analyzedFiles: sources.map((source) => ({ side: "new", path: source.path })),
-          candidates: mapped.candidates,
-        },
-        input.diff,
-      );
-      if (!built.ok) {
-        return built;
+      let rawOutcomes: unknown;
+      try {
+        const analyzerInput = structuredClone({
+          subject: decoded.value.payload.subject,
+          reviewer: decoded.value.payload.reviewer,
+          diff: parsed.diff,
+          sources: decoded.value.payload.sources,
+        });
+        rawOutcomes = await dependencies.analyze(analyzerInput, {
+          signal: context.signal,
+          deadline: context.deadline,
+          limits: { ...context.limits },
+        });
+      } catch {
+        return versionedReviewFailure({
+          code: "analyzer-execution-failed",
+          stage: "analyze",
+          message: "The analyzer Adapter did not complete successfully.",
+        });
       }
-      const { findings, ...reportWithoutFindings } = built.report;
+      if (context.signal.aborted) {
+        return versionedReviewFailure({ code: "cancelled", stage: "analyze" });
+      }
+      if (dependencies.clock() >= context.deadline) {
+        return versionedReviewFailure({ code: "deadline-exceeded", stage: "analyze" });
+      }
+      if (!Array.isArray(rawOutcomes)) {
+        return versionedReviewFailure({
+          code: "invalid-contract",
+          stage: "decode-outcome",
+          issues: [{ path: "/", code: "array" }],
+        });
+      }
+      if (rawOutcomes.length > 100) {
+        return versionedReviewFailure({
+          code: "invalid-contract",
+          stage: "decode-outcome",
+          issues: [{ path: "/", code: "max-items" }],
+        });
+      }
+
+      const outcomes: AnalyzerOutcomeEnvelope[] = [];
+      const analyzerIdentities = new Set<string>();
+      for (const [outcomeIndex, rawOutcome] of rawOutcomes.entries()) {
+        const decodedOutcome = reviewContractV1.decodeOutcome(rawOutcome);
+        if (!decodedOutcome.ok) {
+          return versionedReviewFailure(decodedOutcome.error);
+        }
+        const outcome = structuredClone(decodedOutcome.value);
+        const identity = analyzerIdentity(outcome.payload.analyzer);
+        if (analyzerIdentities.has(identity)) {
+          return versionedReviewFailure({
+            code: "invalid-contract",
+            stage: "decode-outcome",
+            issues: [
+              {
+                path: `/${String(outcomeIndex)}/payload/analyzer`,
+                code: "duplicate",
+              },
+            ],
+          });
+        }
+        analyzerIdentities.add(identity);
+        const classifiedFiles = new Set<number>();
+        for (const [fileIndex, outcomeFile] of outcome.payload.files.entries()) {
+          const matchingFiles = parsed.diff.files.flatMap((file, index) =>
+            pathForSide(file, outcomeFile.side) === outcomeFile.path ? [index] : [],
+          );
+          const matchingFile = matchingFiles[0];
+          if (
+            matchingFiles.length !== 1 ||
+            matchingFile === undefined ||
+            classifiedFiles.has(matchingFile)
+          ) {
+            return versionedReviewFailure({
+              code: "invalid-contract",
+              stage: "decode-outcome",
+              issues: [
+                {
+                  path: `/${String(outcomeIndex)}/payload/files/${String(fileIndex)}/path`,
+                  code: "mismatch",
+                },
+              ],
+            });
+          }
+          classifiedFiles.add(matchingFile);
+        }
+        outcomes.push(outcome);
+      }
+      if (outcomes.length === 0) {
+        return versionedReviewFailure({
+          code: "invalid-contract",
+          stage: "decode-outcome",
+          issues: [{ path: "/", code: "min-items" }],
+        });
+      }
+
+      const orderedOutcomes = outcomes.toSorted(compareAnalyzerIdentity);
+      const candidateCount = orderedOutcomes.reduce(
+        (count, outcome) =>
+          count + (outcome.payload.status === "analyzed" ? outcome.payload.candidates.length : 0),
+        0,
+      );
+      if (candidateCount > 1_000) {
+        return versionedReviewFailure({
+          code: "invalid-contract",
+          stage: "decode-outcome",
+          issues: [{ path: "/", code: "max-items" }],
+        });
+      }
+      const terminalOutcome = orderedOutcomes.find(
+        (outcome) =>
+          outcome.payload.status === "failed" &&
+          (outcome.payload.diagnostic.code === "cancelled" ||
+            outcome.payload.diagnostic.code === "deadline-exceeded"),
+      );
+      if (terminalOutcome?.payload.status === "failed") {
+        return versionedReviewFailure({
+          code: terminalOutcome.payload.diagnostic.code as "cancelled" | "deadline-exceeded",
+          stage: "analyze",
+          ...(terminalOutcome.payload.diagnostic.cleanupIncomplete
+            ? { cleanupIncomplete: true as const }
+            : {}),
+        });
+      }
+
+      const analyzedFiles = orderedOutcomes.flatMap((outcome) =>
+        outcome.payload.status === "analyzed"
+          ? outcome.payload.files.flatMap((file) =>
+              file.status === "analyzed" ? [{ side: file.side, path: file.path }] : [],
+            )
+          : [],
+      );
+      const diffLocationOrder = new Map(
+        parsed.diff.files
+          .flatMap((file) => file.lines.filter((line) => line.changed))
+          .map((line, index) => [locationKey(line.location), index]),
+      );
+      const candidates = orderedOutcomes
+        .flatMap((outcome, analyzerOrder) =>
+          outcome.payload.status === "analyzed"
+            ? outcome.payload.candidates.map((candidate, candidateOrder) => ({
+                candidate,
+                analyzerOrder,
+                candidateOrder,
+              }))
+            : [],
+        )
+        .toSorted((left, right) => {
+          const leftLocation = diffLocationOrder.get(locationKey(left.candidate.location));
+          const rightLocation = diffLocationOrder.get(locationKey(right.candidate.location));
+          return (
+            (leftLocation ?? Number.MAX_SAFE_INTEGER) -
+              (rightLocation ?? Number.MAX_SAFE_INTEGER) ||
+            left.analyzerOrder - right.analyzerOrder ||
+            left.candidateOrder - right.candidateOrder
+          );
+        })
+        .map(({ candidate }) => candidate);
+      const built = buildValidatedReport({
+        repository: decoded.value.payload.subject.repository,
+        pullRequest: decoded.value.payload.subject.number,
+        reviewer: decoded.value.payload.reviewer,
+        diff: decoded.value.payload.diff,
+        sources: decoded.value.payload.sources,
+        analyzedFiles,
+        candidates,
+      });
+      if (!built.ok) {
+        return versionedReviewFailure(built.error);
+      }
+
+      const files = built.report.coverage.files.map(({ analysis: _analysis, ...file }) => ({
+        ...file,
+        analyses: orderedOutcomes.flatMap((outcome) =>
+          outcome.payload.files
+            .filter((outcomeFile) => outcomeMatchesFile(outcomeFile, file))
+            .map((outcomeFile) =>
+              outcomeFile.status === "skipped"
+                ? {
+                    analyzer: outcome.payload.analyzer,
+                    status: outcomeFile.status,
+                    reason: outcomeFile.reason,
+                    side: outcomeFile.side,
+                  }
+                : {
+                    analyzer: outcome.payload.analyzer,
+                    status: outcomeFile.status,
+                    side: outcomeFile.side,
+                  },
+            ),
+        ),
+      }));
+      const coverage = { status: matrixCoverageStatus(files), files };
+      const analyzers = orderedOutcomes.map((outcome) => outcome.payload.analyzer);
+      const diagnostics = orderedOutcomes.flatMap((outcome) =>
+        outcome.payload.status === "failed"
+          ? [{ analyzer: outcome.payload.analyzer, ...outcome.payload.diagnostic }]
+          : [],
+      );
+
+      if (diagnostics.length > 0) {
+        return {
+          kind: "eve-reviewer.review-result" as const,
+          schemaVersion: 1 as const,
+          payload: {
+            ok: false as const,
+            error: { code: "required-analyzer-failed" as const, stage: "analyze" as const },
+            partial: {
+              coverage,
+              analyzers,
+              diagnostics,
+              findings: built.report.findings,
+            },
+          },
+        };
+      }
+
       return {
-        ok: true,
-        report: {
-          ...reportWithoutFindings,
-          analyzer: analyzerDescriptor(),
-          findings,
+        kind: "eve-reviewer.review-result" as const,
+        schemaVersion: 1 as const,
+        payload: {
+          ok: true as const,
+          report: {
+            subject: decoded.value.payload.subject,
+            reviewer: built.report.reviewer,
+            summary: reviewSummary(
+              built.report.findings.length,
+              coverage.files.length,
+              coverage.status,
+              built.report.risk,
+            ),
+            risk: built.report.risk,
+            coverage,
+            analyzers,
+            diagnostics,
+            findings: built.report.findings,
+          },
         },
       };
     },
