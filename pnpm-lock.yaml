@@ -42,6 +42,15 @@ importers:
         specifier: 1.3.6
         version: 1.3.6
 
+  packages/evaluation:
+    dependencies:
+      '@eve-reviewer/core':
+        specifier: workspace:*
+        version: link:../core
+      typebox:
+        specifier: 1.3.6
+        version: 1.3.6
+
 packages:
 
   '@biomejs/biome@2.5.8':

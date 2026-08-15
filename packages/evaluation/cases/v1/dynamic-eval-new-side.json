@@ -1,0 +1,202 @@
+{
+  "kind": "eve-reviewer.evaluation-case",
+  "schemaVersion": 1,
+  "caseId": "dynamic-eval-new-side",
+  "source": "synthetic-controlled",
+  "request": {
+    "kind": "eve-reviewer.review-request",
+    "schemaVersion": 1,
+    "payload": {
+      "subject": {
+        "kind": "pull-request",
+        "repository": "example/repository",
+        "number": 8
+      },
+      "reviewer": "deterministic-security",
+      "diff": "diff --git a/src/value.ts b/src/value.ts\n--- a/src/value.ts\n+++ b/src/value.ts\n@@ -1 +1 @@\n-export const value = input;\n+export const value = eval(input);\n",
+      "sources": {
+        "base": [
+          {
+            "path": "src/value.ts",
+            "content": "export const value = input;\n"
+          }
+        ],
+        "head": [
+          {
+            "path": "src/value.ts",
+            "content": "export const value = eval(input);\n"
+          }
+        ]
+      }
+    }
+  },
+  "baselineResult": {
+    "kind": "eve-reviewer.review-result",
+    "schemaVersion": 1,
+    "payload": {
+      "ok": true,
+      "report": {
+        "subject": {
+          "kind": "pull-request",
+          "repository": "example/repository",
+          "number": 8
+        },
+        "reviewer": "deterministic-security",
+        "summary": "1 finding across 1 changed file; coverage: complete; highest severity: critical.",
+        "risk": "critical",
+        "coverage": {
+          "status": "complete",
+          "files": [
+            {
+              "oldPath": "src/value.ts",
+              "newPath": "src/value.ts",
+              "status": "modified",
+              "baseSource": "available",
+              "headSource": "available",
+              "analyses": [
+                {
+                  "analyzer": {
+                    "tool": "biome",
+                    "version": "2.5.8",
+                    "profile": "deterministic-security",
+                    "rules": ["lint/security/noGlobalEval"]
+                  },
+                  "status": "analyzed",
+                  "side": "new"
+                }
+              ]
+            }
+          ]
+        },
+        "analyzers": [
+          {
+            "tool": "biome",
+            "version": "2.5.8",
+            "profile": "deterministic-security",
+            "rules": ["lint/security/noGlobalEval"]
+          }
+        ],
+        "diagnostics": [],
+        "findings": [
+          {
+            "ruleId": "security/no-dynamic-eval",
+            "severity": "critical",
+            "title": "Dynamic code evaluation",
+            "explanation": "Code added by the change evaluates text as executable code.",
+            "location": {
+              "side": "new",
+              "path": "src/value.ts",
+              "line": 1
+            },
+            "fixGuidance": "Replace eval with an explicit parser.",
+            "suggestedTests": "Assert hostile input is never executed.",
+            "confidence": 0.95,
+            "provenance": {
+              "tool": "biome",
+              "version": "2.5.8",
+              "ruleId": "lint/security/noGlobalEval"
+            },
+            "evidence": "export const value = eval(input);"
+          }
+        ]
+      }
+    }
+  },
+  "candidateOutcomes": [
+    {
+      "kind": "eve-reviewer.analyzer-outcome",
+      "schemaVersion": 1,
+      "payload": {
+        "analyzer": {
+          "tool": "biome",
+          "version": "2.5.8",
+          "profile": "deterministic-security",
+          "rules": ["lint/security/noGlobalEval"]
+        },
+        "status": "analyzed",
+        "files": [
+          {
+            "side": "new",
+            "path": "src/value.ts",
+            "status": "analyzed"
+          }
+        ],
+        "candidates": [
+          {
+            "ruleId": "security/no-dynamic-eval",
+            "severity": "critical",
+            "title": "Dynamic code evaluation",
+            "explanation": "Code added by the change evaluates text as executable code.",
+            "location": {
+              "side": "new",
+              "path": "src/value.ts",
+              "line": 1
+            },
+            "fixGuidance": "Replace eval with an explicit parser.",
+            "suggestedTests": "Assert hostile input is never executed.",
+            "confidence": 0.95,
+            "provenance": {
+              "tool": "biome",
+              "version": "2.5.8",
+              "ruleId": "lint/security/noGlobalEval"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "protected": {
+    "result": {
+      "ok": true
+    },
+    "coverage": {
+      "status": "complete",
+      "files": [
+        {
+          "oldPath": "src/value.ts",
+          "newPath": "src/value.ts",
+          "status": "modified",
+          "baseSource": "available",
+          "headSource": "available",
+          "analyses": [
+            {
+              "analyzer": {
+                "tool": "biome",
+                "version": "2.5.8",
+                "profile": "deterministic-security",
+                "rules": ["lint/security/noGlobalEval"]
+              },
+              "status": "analyzed",
+              "side": "new"
+            }
+          ]
+        }
+      ]
+    },
+    "analyzers": [
+      {
+        "tool": "biome",
+        "version": "2.5.8",
+        "profile": "deterministic-security",
+        "rules": ["lint/security/noGlobalEval"]
+      }
+    ],
+    "findings": [
+      {
+        "ruleId": "security/no-dynamic-eval",
+        "severity": "critical",
+        "location": {
+          "side": "new",
+          "path": "src/value.ts",
+          "line": 1
+        },
+        "evidence": "export const value = eval(input);",
+        "provenance": {
+          "tool": "biome",
+          "version": "2.5.8",
+          "ruleId": "lint/security/noGlobalEval"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "outDir": "../../dist/packages/evaluation",
+    "rootDir": ".",
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "references": [{ "path": "../core" }]
+}

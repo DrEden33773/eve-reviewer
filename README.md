@@ -17,7 +17,8 @@ The current path is intentionally narrow:
 - its strict v1 request, analyzer-outcome and result envelopes reject unknown fields, unsupported schema versions and untrusted analyzer output with bounded typed errors;
 - its exported headless review use case accepts an absolute deadline, cancellation signal and caller-tightened resource limits, preserves duplicate findings and recomputes report truth from validated outcomes;
 - its exported stateless in-memory JSON Adapter decodes a request and returns canonical compact JSON without retaining review state;
-- its Linux CLI Adapter runs pinned Biome asynchronously with bounded source, stdout, stderr and SARIF bytes, process-group termination and temporary-resource cleanup; and
+- its Linux CLI Adapter runs pinned Biome asynchronously with bounded source, stdout, stderr and SARIF bytes, process-group termination and temporary-resource cleanup;
+- its strict deterministic evaluation package replays versioned synthetic cases through frozen and current review targets, compares protected coverage exactly, matches findings as an evidence-linked multiset and emits bounded integer metrics from a canonical one-shot command; and
 - it has no Adam extension Adapter, model reviewer, persistence, GitHub integration, TUI or Web contribution.
 
 HTTP, an Eve-owned provider/runtime, queues, databases and a standalone dashboard are not planned for the first integrated path.
@@ -48,6 +49,16 @@ pnpm exec eve-reviewer --repository owner/repository --pull-request 123 --source
 ```
 
 The source root supplies the post-change head files needed by the current syntax-aware analyzer. The command writes one canonical v1 result envelope: success goes to stdout, while domain or Adapter failures go to stderr. Its coverage matrix distinguishes analyzed files from unsupported, deleted, binary, metadata-only or unavailable content and records the exact analyzer profile used. `SIGINT` and `SIGTERM` cancel an active CLI review and wait for bounded analyzer cleanup. Output from this command is deterministic fixture evidence, not a claim of production readiness. Diff-only syntax-aware review remains unsupported.
+
+## Deterministic evaluation
+
+Replay the checked-in versioned synthetic cases against the frozen baseline and the current exported review use case:
+
+```bash
+pnpm evaluation:compare
+```
+
+The command accepts no arguments and never promotes or rewrites a baseline. A completed comparison is written as one canonical v1 evaluation-result envelope on stdout: exit code `0` means the candidate passed every protected fact, while exit code `1` means a completed gate failed. Invalid data, resource limits, cancellation or deadline expiry use a typed terminal envelope on stderr and exit code `1`; usage errors exit with code `2`. The checked-in cases protect old/new-side evidence, source availability, modified/deleted file classification and `complete`, `partial` and `no-coverage` states. They are controlled synthetic evidence, not live-provider, production or model-quality evidence.
 
 Third-party parser and analyzer dependencies are recorded in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
