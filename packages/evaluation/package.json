@@ -1,0 +1,13 @@
+{
+  "name": "@eve-reviewer/evaluation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@eve-reviewer/core": "workspace:*",
+    "typebox": "1.3.6"
+  }
+}

@@ -1,0 +1,197 @@
+{
+  "kind": "eve-reviewer.evaluation-case",
+  "schemaVersion": 1,
+  "caseId": "deleted-old-side",
+  "source": "synthetic-controlled",
+  "request": {
+    "kind": "eve-reviewer.review-request",
+    "schemaVersion": 1,
+    "payload": {
+      "subject": {
+        "kind": "pull-request",
+        "repository": "example/repository",
+        "number": 9
+      },
+      "reviewer": "deterministic-security",
+      "diff": "diff --git a/src/legacy.ts b/src/legacy.ts\ndeleted file mode 100644\n--- a/src/legacy.ts\n+++ /dev/null\n@@ -1 +0,0 @@\n-export const legacy = eval(input);\n",
+      "sources": {
+        "base": [
+          {
+            "path": "src/legacy.ts",
+            "content": "export const legacy = eval(input);\n"
+          }
+        ],
+        "head": []
+      }
+    }
+  },
+  "baselineResult": {
+    "kind": "eve-reviewer.review-result",
+    "schemaVersion": 1,
+    "payload": {
+      "ok": true,
+      "report": {
+        "subject": {
+          "kind": "pull-request",
+          "repository": "example/repository",
+          "number": 9
+        },
+        "reviewer": "deterministic-security",
+        "summary": "1 finding across 1 changed file; coverage: complete; highest severity: critical.",
+        "risk": "critical",
+        "coverage": {
+          "status": "complete",
+          "files": [
+            {
+              "oldPath": "src/legacy.ts",
+              "newPath": null,
+              "status": "deleted",
+              "baseSource": "available",
+              "headSource": "not-applicable",
+              "analyses": [
+                {
+                  "analyzer": {
+                    "tool": "biome",
+                    "version": "2.5.8",
+                    "profile": "deterministic-security",
+                    "rules": ["lint/security/noGlobalEval"]
+                  },
+                  "status": "analyzed",
+                  "side": "old"
+                }
+              ]
+            }
+          ]
+        },
+        "analyzers": [
+          {
+            "tool": "biome",
+            "version": "2.5.8",
+            "profile": "deterministic-security",
+            "rules": ["lint/security/noGlobalEval"]
+          }
+        ],
+        "diagnostics": [],
+        "findings": [
+          {
+            "ruleId": "security/no-dynamic-eval",
+            "severity": "critical",
+            "title": "Deleted dynamic evaluation",
+            "explanation": "The removed line is retained as old-side review evidence.",
+            "location": {
+              "side": "old",
+              "path": "src/legacy.ts",
+              "line": 1
+            },
+            "fixGuidance": "Keep the removal and avoid restoring dynamic evaluation.",
+            "suggestedTests": "Assert legacy input is never evaluated as code.",
+            "confidence": 0.95,
+            "provenance": {
+              "tool": "biome",
+              "version": "2.5.8",
+              "ruleId": "lint/security/noGlobalEval"
+            },
+            "evidence": "export const legacy = eval(input);"
+          }
+        ]
+      }
+    }
+  },
+  "candidateOutcomes": [
+    {
+      "kind": "eve-reviewer.analyzer-outcome",
+      "schemaVersion": 1,
+      "payload": {
+        "analyzer": {
+          "tool": "biome",
+          "version": "2.5.8",
+          "profile": "deterministic-security",
+          "rules": ["lint/security/noGlobalEval"]
+        },
+        "status": "analyzed",
+        "files": [
+          {
+            "side": "old",
+            "path": "src/legacy.ts",
+            "status": "analyzed"
+          }
+        ],
+        "candidates": [
+          {
+            "ruleId": "security/no-dynamic-eval",
+            "severity": "critical",
+            "title": "Deleted dynamic evaluation",
+            "explanation": "The removed line is retained as old-side review evidence.",
+            "location": {
+              "side": "old",
+              "path": "src/legacy.ts",
+              "line": 1
+            },
+            "fixGuidance": "Keep the removal and avoid restoring dynamic evaluation.",
+            "suggestedTests": "Assert legacy input is never evaluated as code.",
+            "confidence": 0.95,
+            "provenance": {
+              "tool": "biome",
+              "version": "2.5.8",
+              "ruleId": "lint/security/noGlobalEval"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "protected": {
+    "result": {
+      "ok": true
+    },
+    "coverage": {
+      "status": "complete",
+      "files": [
+        {
+          "oldPath": "src/legacy.ts",
+          "newPath": null,
+          "status": "deleted",
+          "baseSource": "available",
+          "headSource": "not-applicable",
+          "analyses": [
+            {
+              "analyzer": {
+                "tool": "biome",
+                "version": "2.5.8",
+                "profile": "deterministic-security",
+                "rules": ["lint/security/noGlobalEval"]
+              },
+              "status": "analyzed",
+              "side": "old"
+            }
+          ]
+        }
+      ]
+    },
+    "analyzers": [
+      {
+        "tool": "biome",
+        "version": "2.5.8",
+        "profile": "deterministic-security",
+        "rules": ["lint/security/noGlobalEval"]
+      }
+    ],
+    "findings": [
+      {
+        "ruleId": "security/no-dynamic-eval",
+        "severity": "critical",
+        "location": {
+          "side": "old",
+          "path": "src/legacy.ts",
+          "line": 1
+        },
+        "evidence": "export const legacy = eval(input);",
+        "provenance": {
+          "tool": "biome",
+          "version": "2.5.8",
+          "ruleId": "lint/security/noGlobalEval"
+        }
+      }
+    ]
+  }
+}

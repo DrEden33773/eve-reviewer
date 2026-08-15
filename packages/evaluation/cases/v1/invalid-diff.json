@@ -1,0 +1,65 @@
+{
+  "kind": "eve-reviewer.evaluation-case",
+  "schemaVersion": 1,
+  "caseId": "invalid-diff",
+  "source": "synthetic-controlled",
+  "request": {
+    "kind": "eve-reviewer.review-request",
+    "schemaVersion": 1,
+    "payload": {
+      "subject": {
+        "kind": "pull-request",
+        "repository": "example/repository",
+        "number": 7
+      },
+      "reviewer": "deterministic-security",
+      "diff": "diff --git a/src/value.ts b/src/value.ts\n",
+      "sources": {
+        "base": [],
+        "head": []
+      }
+    }
+  },
+  "baselineResult": {
+    "kind": "eve-reviewer.review-result",
+    "schemaVersion": 1,
+    "payload": {
+      "ok": false,
+      "error": {
+        "code": "invalid-diff",
+        "message": "The diff is invalid."
+      }
+    }
+  },
+  "candidateOutcomes": [
+    {
+      "kind": "eve-reviewer.analyzer-outcome",
+      "schemaVersion": 1,
+      "payload": {
+        "analyzer": {
+          "tool": "biome",
+          "version": "2.5.8",
+          "profile": "deterministic-security",
+          "rules": ["lint/security/noGlobalEval"]
+        },
+        "status": "skipped",
+        "files": [
+          {
+            "side": "new",
+            "path": "src/value.ts",
+            "status": "skipped",
+            "reason": "source-unavailable"
+          }
+        ]
+      }
+    }
+  ],
+  "protected": {
+    "result": {
+      "ok": false,
+      "errorCode": "invalid-diff"
+    },
+    "analyzers": [],
+    "findings": []
+  }
+}

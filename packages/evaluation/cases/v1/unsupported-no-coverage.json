@@ -1,0 +1,147 @@
+{
+  "kind": "eve-reviewer.evaluation-case",
+  "schemaVersion": 1,
+  "caseId": "unsupported-no-coverage",
+  "source": "synthetic-controlled",
+  "request": {
+    "kind": "eve-reviewer.review-request",
+    "schemaVersion": 1,
+    "payload": {
+      "subject": {
+        "kind": "pull-request",
+        "repository": "example/repository",
+        "number": 11
+      },
+      "reviewer": "deterministic-security",
+      "diff": "diff --git a/README.md b/README.md\n--- a/README.md\n+++ b/README.md\n@@ -1 +1 @@\n-old\n+new\n",
+      "sources": {
+        "base": [
+          {
+            "path": "README.md",
+            "content": "old\n"
+          }
+        ],
+        "head": [
+          {
+            "path": "README.md",
+            "content": "new\n"
+          }
+        ]
+      }
+    }
+  },
+  "baselineResult": {
+    "kind": "eve-reviewer.review-result",
+    "schemaVersion": 1,
+    "payload": {
+      "ok": true,
+      "report": {
+        "subject": {
+          "kind": "pull-request",
+          "repository": "example/repository",
+          "number": 11
+        },
+        "reviewer": "deterministic-security",
+        "summary": "0 findings across 1 changed file; coverage: no-coverage; highest severity: none.",
+        "risk": "none",
+        "coverage": {
+          "status": "no-coverage",
+          "files": [
+            {
+              "oldPath": "README.md",
+              "newPath": "README.md",
+              "status": "modified",
+              "baseSource": "available",
+              "headSource": "available",
+              "analyses": [
+                {
+                  "analyzer": {
+                    "tool": "biome",
+                    "version": "2.5.8",
+                    "profile": "deterministic-security",
+                    "rules": ["lint/security/noGlobalEval"]
+                  },
+                  "status": "skipped",
+                  "reason": "unsupported",
+                  "side": "new"
+                }
+              ]
+            }
+          ]
+        },
+        "analyzers": [
+          {
+            "tool": "biome",
+            "version": "2.5.8",
+            "profile": "deterministic-security",
+            "rules": ["lint/security/noGlobalEval"]
+          }
+        ],
+        "diagnostics": [],
+        "findings": []
+      }
+    }
+  },
+  "candidateOutcomes": [
+    {
+      "kind": "eve-reviewer.analyzer-outcome",
+      "schemaVersion": 1,
+      "payload": {
+        "analyzer": {
+          "tool": "biome",
+          "version": "2.5.8",
+          "profile": "deterministic-security",
+          "rules": ["lint/security/noGlobalEval"]
+        },
+        "status": "skipped",
+        "files": [
+          {
+            "side": "new",
+            "path": "README.md",
+            "status": "skipped",
+            "reason": "unsupported"
+          }
+        ]
+      }
+    }
+  ],
+  "protected": {
+    "result": {
+      "ok": true
+    },
+    "coverage": {
+      "status": "no-coverage",
+      "files": [
+        {
+          "oldPath": "README.md",
+          "newPath": "README.md",
+          "status": "modified",
+          "baseSource": "available",
+          "headSource": "available",
+          "analyses": [
+            {
+              "analyzer": {
+                "tool": "biome",
+                "version": "2.5.8",
+                "profile": "deterministic-security",
+                "rules": ["lint/security/noGlobalEval"]
+              },
+              "status": "skipped",
+              "reason": "unsupported",
+              "side": "new"
+            }
+          ]
+        }
+      ]
+    },
+    "analyzers": [
+      {
+        "tool": "biome",
+        "version": "2.5.8",
+        "profile": "deterministic-security",
+        "rules": ["lint/security/noGlobalEval"]
+      }
+    ],
+    "findings": []
+  }
+}
