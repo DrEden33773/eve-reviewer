@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 
-import { createDeterministicReviewer, MAX_DIFF_BYTES, parseUnifiedDiff } from "@eve-reviewer/core";
+import {
+  createReviewUseCase,
+  MAX_DIFF_BYTES,
+  parseUnifiedDiff,
+  reviewContractV1,
+} from "@eve-reviewer/core";
 
 import { readBoundedTextFile } from "./bounded-file.ts";
+import { createDeterministicAnalyze } from "./deterministic-analyze.ts";
 import { executeLocalBiome, loadHeadSources, localAnalyzerLimits } from "./local-biome.ts";
 
 const usage =
@@ -10,7 +16,24 @@ const usage =
 const defaultDeadlineMilliseconds = 5_000;
 
 function writeTypedFailure(error: object): void {
-  process.stderr.write(`${JSON.stringify(error)}\n`);
+  const encoded = reviewContractV1.encodeResult({
+    kind: "eve-reviewer.review-result",
+    schemaVersion: 1,
+    payload: { ok: false, error },
+  });
+  if (!encoded.ok) {
+    const rejection = reviewContractV1.encodeResult({
+      kind: "eve-reviewer.review-result",
+      schemaVersion: 1,
+      payload: { ok: false, error: encoded.error },
+    });
+    if (!rejection.ok) {
+      throw new Error("Unable to encode the CLI failure result.");
+    }
+    process.stderr.write(`${rejection.value}\n`);
+  } else {
+    process.stderr.write(`${encoded.value}\n`);
+  }
   process.exitCode = 1;
 }
 
@@ -65,10 +88,6 @@ async function main(): Promise<void> {
         writeTypedFailure({
           code: diffInput.failure === "cancelled" ? "cancelled" : "deadline-exceeded",
           stage: "start",
-          message:
-            diffInput.failure === "cancelled"
-              ? "The deterministic review was cancelled while reading diff input."
-              : "The deterministic review deadline elapsed while reading diff input.",
           ...(diffInput.cleanupIncomplete ? { cleanupIncomplete: true } : {}),
         });
         return;
@@ -97,17 +116,22 @@ async function main(): Promise<void> {
       return;
     }
 
-    const reviewer = createDeterministicReviewer({
-      executeAnalyzer: executeLocalBiome,
+    const reviewer = createReviewUseCase({
+      analyze: createDeterministicAnalyze({
+        executeAnalyzer: executeLocalBiome,
+      }),
       clock: Date.now,
     });
     const result = await reviewer.review(
       {
-        repository,
-        pullRequest,
-        reviewer: "deterministic-security",
-        diff: parsed.diff,
-        sources: { base: [], head: loaded.sources },
+        kind: "eve-reviewer.review-request",
+        schemaVersion: 1,
+        payload: {
+          subject: { kind: "pull-request", repository, number: pullRequest },
+          reviewer: "deterministic-security",
+          diff: diffInput.text,
+          sources: { base: [], head: loaded.sources },
+        },
       },
       {
         signal: controller.signal,
@@ -115,11 +139,17 @@ async function main(): Promise<void> {
         limits: localAnalyzerLimits,
       },
     );
-    if (!result.ok) {
-      writeTypedFailure(result.error);
+    const encoded = reviewContractV1.encodeResult(result);
+    if (!encoded.ok) {
+      writeTypedFailure(encoded.error);
       return;
     }
-    process.stdout.write(`${JSON.stringify(result.report, null, 2)}\n`);
+    if (!result.payload.ok) {
+      process.stderr.write(`${encoded.value}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`${encoded.value}\n`);
   } finally {
     process.off("SIGINT", abort);
     process.off("SIGTERM", abort);

@@ -6,15 +6,17 @@ The product will remain independently testable and runnable through a headless C
 
 ## Current status
 
-The current implementation provides an asynchronous deterministic local review path with normalized old/new-side changes, explicit base/head source availability, source-owned evidence and per-file coverage.
+The current implementation provides a strict versioned domain contract and an asynchronous deterministic local review path with normalized old/new-side changes, explicit base/head source availability, source-owned evidence and per-analyzer file coverage.
 
 The current path is intentionally narrow:
 
 - it recognizes one JavaScript/TypeScript dynamic-code-evaluation rule through pinned Biome;
 - it classifies added, modified, deleted, renamed, binary and metadata-only files;
 - it can validate old- or new-side findings through the exported core use case, while the current Biome Adapter emits new-side findings only;
-- it reports `complete`, `partial` or `no-coverage` from explicit per-file analysis and source availability;
-- its exported headless review use case accepts an absolute deadline, cancellation signal and caller-tightened resource limits;
+- it reports `complete`, `partial` or `no-coverage` from a stable per-file analysis matrix and source availability;
+- its strict v1 request, analyzer-outcome and result envelopes reject unknown fields, unsupported schema versions and untrusted analyzer output with bounded typed errors;
+- its exported headless review use case accepts an absolute deadline, cancellation signal and caller-tightened resource limits, preserves duplicate findings and recomputes report truth from validated outcomes;
+- its exported stateless in-memory JSON Adapter decodes a request and returns canonical compact JSON without retaining review state;
 - its Linux CLI Adapter runs pinned Biome asynchronously with bounded source, stdout, stderr and SARIF bytes, process-group termination and temporary-resource cleanup; and
 - it has no Adam extension Adapter, model reviewer, persistence, GitHub integration, TUI or Web contribution.
 
@@ -45,7 +47,7 @@ For another unified diff, call the current CLI entry with an explicit repository
 pnpm exec eve-reviewer --repository owner/repository --pull-request 123 --source-root path/to/post-change-tree path/to/change.diff
 ```
 
-The source root supplies the post-change head files needed by the current syntax-aware analyzer. The report distinguishes analyzed files from unsupported, deleted, binary, metadata-only or unavailable content and records the exact analyzer profile used. `SIGINT` and `SIGTERM` cancel an active CLI review and wait for bounded analyzer cleanup. Output from this command is deterministic fixture evidence, not a claim of production readiness. Diff-only syntax-aware review remains unsupported.
+The source root supplies the post-change head files needed by the current syntax-aware analyzer. The command writes one canonical v1 result envelope: success goes to stdout, while domain or Adapter failures go to stderr. Its coverage matrix distinguishes analyzed files from unsupported, deleted, binary, metadata-only or unavailable content and records the exact analyzer profile used. `SIGINT` and `SIGTERM` cancel an active CLI review and wait for bounded analyzer cleanup. Output from this command is deterministic fixture evidence, not a claim of production readiness. Diff-only syntax-aware review remains unsupported.
 
 Third-party parser and analyzer dependencies are recorded in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 

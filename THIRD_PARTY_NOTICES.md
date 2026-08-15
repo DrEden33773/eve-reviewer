@@ -6,5 +6,6 @@ Eve Reviewer depends on the following third-party packages for the deterministic
 | --- | --- | --- | --- |
 | [`@biomejs/biome`](https://biomejs.dev/) | 2.5.8 | Syntax-aware JavaScript and TypeScript analysis | MIT OR Apache-2.0 |
 | [`diff`](https://github.com/kpdecker/jsdiff) | 9.0.0 | Structured unified-diff parsing | BSD-3-Clause |
+| [`typebox`](https://github.com/sinclairzx81/typebox) | 1.3.6 | Runtime validation and static typing for versioned domain contracts | MIT |
 
 The installed packages include their license texts. The exact dependency graph is pinned in `pnpm-lock.yaml`.

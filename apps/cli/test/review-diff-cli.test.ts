@@ -14,6 +14,23 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { reviewContractV1 } from "@eve-reviewer/core";
+
+function canonicalResult(value: unknown): string {
+  const encoded = reviewContractV1.encodeResult(value);
+  assert.equal(encoded.ok, true);
+  assert.ok("value" in encoded);
+  return `${encoded.value}\n`;
+}
+
+function canonicalFailure(error: object): string {
+  return canonicalResult({
+    kind: "eve-reviewer.review-result",
+    schemaVersion: 1,
+    payload: { ok: false, error },
+  });
+}
+
 test("prints a stable evidence-linked report for a diff fixture", () => {
   const cliPath = fileURLToPath(new URL("../src/main.ts", import.meta.url));
   const fixturePath = fileURLToPath(
@@ -37,12 +54,24 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
 
   assert.equal(result.status, 0);
   assert.equal(result.stderr, "");
-  assert.equal(
-    result.stdout,
-    `${JSON.stringify(
-      {
-        repository: "acme/widgets",
-        pullRequest: 17,
+  const analyzer = {
+    tool: "biome",
+    version: "2.5.8",
+    profile: "deterministic-security",
+    rules: ["lint/security/noGlobalEval"],
+  };
+  const expected = reviewContractV1.encodeResult({
+    kind: "eve-reviewer.review-result",
+    schemaVersion: 1,
+    payload: {
+      ok: true,
+      report: {
+        subject: {
+          kind: "pull-request",
+          repository: "acme/widgets",
+          number: 17,
+        },
+        reviewer: "deterministic-security",
         summary:
           "2 findings across 2 changed files; coverage: partial; highest severity: critical.",
         risk: "critical",
@@ -55,7 +84,7 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
               status: "modified",
               baseSource: "unavailable",
               headSource: "available",
-              analysis: { status: "analyzed", side: "new" },
+              analyses: [{ analyzer, status: "analyzed", side: "new" }],
             },
             {
               oldPath: "README.md",
@@ -63,17 +92,12 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
               status: "modified",
               baseSource: "unavailable",
               headSource: "available",
-              analysis: { status: "not-analyzed", reason: "unsupported" },
+              analyses: [{ analyzer, status: "skipped", reason: "unsupported", side: "new" }],
             },
           ],
         },
-        reviewer: "deterministic-security",
-        analyzer: {
-          tool: "biome",
-          version: "2.5.8",
-          profile: "deterministic-security",
-          rules: ["lint/security/noGlobalEval"],
-        },
+        analyzers: [analyzer],
+        diagnostics: [],
         findings: [
           {
             ruleId: "security/no-dynamic-eval",
@@ -109,10 +133,11 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
           },
         ],
       },
-      null,
-      2,
-    )}\n`,
-  );
+    },
+  });
+  assert.equal(expected.ok, true);
+  assert.ok("value" in expected);
+  assert.equal(result.stdout, `${expected.value}\n`);
 });
 
 test("reports stable usage when required arguments are missing", () => {
@@ -142,7 +167,17 @@ test("returns a typed source-unavailable result for a valid diff-only request", 
   assert.equal(result.stdout, "");
   assert.equal(
     result.stderr,
-    '{"code":"source-unavailable","message":"Syntax-aware review requires complete post-change source."}\n',
+    canonicalResult({
+      kind: "eve-reviewer.review-result",
+      schemaVersion: 1,
+      payload: {
+        ok: false,
+        error: {
+          code: "source-unavailable",
+          message: "Syntax-aware review requires complete post-change source.",
+        },
+      },
+    }),
   );
 });
 
@@ -168,7 +203,10 @@ test("validates the diff before returning source-unavailable in diff-only mode",
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-diff","message":"Malformed unified diff: hunk line counts do not match its header."}\n',
+      canonicalFailure({
+        code: "invalid-diff",
+        message: "Malformed unified diff: hunk line counts do not match its header.",
+      }),
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
@@ -256,7 +294,10 @@ test("rejects an oversized diff before reading its contents", () => {
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-diff","message":"Diff exceeds the 1000000-byte input limit."}\n',
+      canonicalFailure({
+        code: "invalid-diff",
+        message: "Diff exceeds the 1000000-byte input limit.",
+      }),
     );
   } finally {
     chmodSync(oversizedPath, 0o600);
@@ -284,7 +325,10 @@ test("returns a typed error when the diff file cannot be read", () => {
 
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
-  assert.equal(result.stderr, '{"code":"invalid-diff","message":"Unable to read diff input."}\n');
+  assert.equal(
+    result.stderr,
+    canonicalFailure({ code: "invalid-diff", message: "Unable to read diff input." }),
+  );
 });
 
 test("rejects a source path that escapes the source root through a symbolic link", () => {
@@ -322,7 +366,10 @@ test("rejects a source path that escapes the source root through a symbolic link
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-source","message":"Source path is outside the source root: linked.ts."}\n',
+      canonicalFailure({
+        code: "invalid-source",
+        message: "Source path is outside the source root: linked.ts.",
+      }),
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
@@ -367,32 +414,34 @@ test("ignores analyzer diagnostics outside the changed lines", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    assert.deepEqual(JSON.parse(result.stdout), {
-      repository: "acme/widgets",
-      pullRequest: 17,
-      summary: "0 findings across 1 changed file; coverage: complete; highest severity: none.",
-      risk: "none",
-      coverage: {
-        status: "complete",
-        files: [
-          {
-            oldPath: "example.ts",
-            newPath: "example.ts",
-            status: "modified",
-            baseSource: "unavailable",
-            headSource: "available",
-            analysis: { status: "analyzed", side: "new" },
-          },
-        ],
-      },
-      reviewer: "deterministic-security",
-      analyzer: {
-        tool: "biome",
-        version: "2.5.8",
-        profile: "deterministic-security",
-        rules: ["lint/security/noGlobalEval"],
-      },
-      findings: [],
+    const envelope = JSON.parse(result.stdout) as {
+      payload: { report: { coverage: unknown; findings: unknown[] } };
+    };
+    assert.equal(canonicalResult(envelope), result.stdout);
+    assert.deepEqual(envelope.payload.report.findings, []);
+    assert.deepEqual(envelope.payload.report.coverage, {
+      status: "complete",
+      files: [
+        {
+          oldPath: "example.ts",
+          newPath: "example.ts",
+          status: "modified",
+          baseSource: "unavailable",
+          headSource: "available",
+          analyses: [
+            {
+              analyzer: {
+                tool: "biome",
+                version: "2.5.8",
+                profile: "deterministic-security",
+                rules: ["lint/security/noGlobalEval"],
+              },
+              status: "analyzed",
+              side: "new",
+            },
+          ],
+        },
+      ],
     });
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
@@ -436,10 +485,30 @@ test("rejects source whose eval binding makes the analyzer result ambiguous", ()
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, "");
-    assert.equal(
-      result.stderr,
-      '{"code":"analyzer-diagnostic","stage":"analyze","message":"Biome reported diagnostic parse outside the deterministic review profile.","analyzer":{"tool":"biome","version":"2.5.8","profile":"deterministic-security","rules":["lint/security/noGlobalEval"]}}\n',
-    );
+    const envelope = JSON.parse(result.stderr) as {
+      payload: {
+        error: unknown;
+        partial: { coverage: { status: string }; diagnostics: unknown[] };
+      };
+    };
+    assert.equal(canonicalResult(envelope), result.stderr);
+    assert.deepEqual(envelope.payload.error, {
+      code: "required-analyzer-failed",
+      stage: "analyze",
+    });
+    assert.equal(envelope.payload.partial.coverage.status, "no-coverage");
+    assert.deepEqual(envelope.payload.partial.diagnostics, [
+      {
+        analyzer: {
+          tool: "biome",
+          version: "2.5.8",
+          profile: "deterministic-security",
+          rules: ["lint/security/noGlobalEval"],
+        },
+        code: "analyzer-diagnostic",
+        message: "Biome reported a diagnostic outside the deterministic review profile.",
+      },
+    ]);
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
   }
@@ -476,10 +545,26 @@ test("rejects source that the syntax-aware analyzer cannot parse", () => {
 
     assert.equal(result.status, 1);
     assert.equal(result.stdout, "");
-    assert.equal(
-      result.stderr,
-      '{"code":"analyzer-diagnostic","stage":"analyze","message":"Biome reported diagnostic parse outside the deterministic review profile.","analyzer":{"tool":"biome","version":"2.5.8","profile":"deterministic-security","rules":["lint/security/noGlobalEval"]}}\n',
-    );
+    const envelope = JSON.parse(result.stderr) as {
+      payload: { error: unknown; partial: { diagnostics: unknown[] } };
+    };
+    assert.equal(canonicalResult(envelope), result.stderr);
+    assert.deepEqual(envelope.payload.error, {
+      code: "required-analyzer-failed",
+      stage: "analyze",
+    });
+    assert.deepEqual(envelope.payload.partial.diagnostics, [
+      {
+        analyzer: {
+          tool: "biome",
+          version: "2.5.8",
+          profile: "deterministic-security",
+          rules: ["lint/security/noGlobalEval"],
+        },
+        code: "analyzer-diagnostic",
+        message: "Biome reported a diagnostic outside the deterministic review profile.",
+      },
+    ]);
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
   }
@@ -526,8 +611,11 @@ test("does not let source suppression comments hide a finding", () => {
 
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
-    const report = JSON.parse(result.stdout) as { findings: Array<Record<string, unknown>> };
-    assert.deepEqual(report.findings, [
+    const envelope = JSON.parse(result.stdout) as {
+      payload: { report: { findings: Array<Record<string, unknown>> } };
+    };
+    assert.equal(canonicalResult(envelope), result.stdout);
+    assert.deepEqual(envelope.payload.report.findings, [
       {
         ruleId: "security/no-dynamic-eval",
         severity: "critical",
@@ -585,7 +673,10 @@ test("rejects a diff with too many changed files", () => {
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-diff","message":"Diff exceeds the 100-changed-file limit."}\n',
+      canonicalFailure({
+        code: "invalid-diff",
+        message: "Diff exceeds the 100-changed-file limit.",
+      }),
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
@@ -633,7 +724,10 @@ test("rejects a source snapshot whose aggregate size is too large", () => {
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-source","message":"Source snapshot exceeds the 5000000-byte aggregate limit."}\n',
+      canonicalFailure({
+        code: "invalid-source",
+        message: "Source snapshot exceeds the 5000000-byte aggregate limit.",
+      }),
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
