@@ -6,7 +6,7 @@ The product will remain independently testable and runnable through a headless C
 
 ## Current status
 
-The current implementation provides a deterministic local review path with normalized old/new-side changes, explicit base/head source availability, source-owned evidence and per-file coverage.
+The current implementation provides an asynchronous deterministic local review path with normalized old/new-side changes, explicit base/head source availability, source-owned evidence and per-file coverage.
 
 The current path is intentionally narrow:
 
@@ -14,7 +14,8 @@ The current path is intentionally narrow:
 - it classifies added, modified, deleted, renamed, binary and metadata-only files;
 - it can validate old- or new-side findings through the exported core use case, while the current Biome Adapter emits new-side findings only;
 - it reports `complete`, `partial` or `no-coverage` from explicit per-file analysis and source availability;
-- its Biome execution and local source loading are still synchronous and do not accept caller cancellation or deadlines; and
+- its exported headless review use case accepts an absolute deadline, cancellation signal and caller-tightened resource limits;
+- its Linux CLI Adapter runs pinned Biome asynchronously with bounded source, stdout, stderr and SARIF bytes, process-group termination and temporary-resource cleanup; and
 - it has no Adam extension Adapter, model reviewer, persistence, GitHub integration, TUI or Web contribution.
 
 HTTP, an Eve-owned provider/runtime, queues, databases and a standalone dashboard are not planned for the first integrated path.
@@ -44,9 +45,7 @@ For another unified diff, call the current CLI entry with an explicit repository
 pnpm exec eve-reviewer --repository owner/repository --pull-request 123 --source-root path/to/post-change-tree path/to/change.diff
 ```
 
-The source root supplies the post-change head files needed by the current syntax-aware analyzer. The report distinguishes analyzed files from unsupported, deleted, binary, metadata-only or unavailable content. Output from this command is deterministic fixture evidence, not a claim of production readiness. Diff-only syntax-aware review remains unsupported.
-
-Making analyzer execution asynchronous, cancellable and deadline-aware requires a separately authorized behavior slice. Publication also requires separate authorization.
+The source root supplies the post-change head files needed by the current syntax-aware analyzer. The report distinguishes analyzed files from unsupported, deleted, binary, metadata-only or unavailable content and records the exact analyzer profile used. `SIGINT` and `SIGTERM` cancel an active CLI review and wait for bounded analyzer cleanup. Output from this command is deterministic fixture evidence, not a claim of production readiness. Diff-only syntax-aware review remains unsupported.
 
 Third-party parser and analyzer dependencies are recorded in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
