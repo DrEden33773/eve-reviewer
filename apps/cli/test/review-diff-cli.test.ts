@@ -68,6 +68,12 @@ test("prints a stable evidence-linked report for a diff fixture", () => {
           ],
         },
         reviewer: "deterministic-security",
+        analyzer: {
+          tool: "biome",
+          version: "2.5.8",
+          profile: "deterministic-security",
+          rules: ["lint/security/noGlobalEval"],
+        },
         findings: [
           {
             ruleId: "security/no-dynamic-eval",
@@ -380,6 +386,12 @@ test("ignores analyzer diagnostics outside the changed lines", () => {
         ],
       },
       reviewer: "deterministic-security",
+      analyzer: {
+        tool: "biome",
+        version: "2.5.8",
+        profile: "deterministic-security",
+        rules: ["lint/security/noGlobalEval"],
+      },
       findings: [],
     });
   } finally {
@@ -426,7 +438,7 @@ test("rejects source whose eval binding makes the analyzer result ambiguous", ()
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-analyzer-output","message":"Biome SARIF contains a non-review diagnostic."}\n',
+      '{"code":"analyzer-diagnostic","stage":"analyze","message":"Biome reported diagnostic parse outside the deterministic review profile.","analyzer":{"tool":"biome","version":"2.5.8","profile":"deterministic-security","rules":["lint/security/noGlobalEval"]}}\n',
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
@@ -466,7 +478,7 @@ test("rejects source that the syntax-aware analyzer cannot parse", () => {
     assert.equal(result.stdout, "");
     assert.equal(
       result.stderr,
-      '{"code":"invalid-analyzer-output","message":"Biome SARIF contains a non-review diagnostic."}\n',
+      '{"code":"analyzer-diagnostic","stage":"analyze","message":"Biome reported diagnostic parse outside the deterministic review profile.","analyzer":{"tool":"biome","version":"2.5.8","profile":"deterministic-security","rules":["lint/security/noGlobalEval"]}}\n',
     );
   } finally {
     rmSync(temporaryDirectory, { recursive: true });
