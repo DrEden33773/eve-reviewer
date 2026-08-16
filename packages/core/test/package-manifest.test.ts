@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("the core package exposes only its built root as a public provenance-ready package", () => {
+test("the core bootstrap artifact is public and provenance-disabled", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
   ) as Record<string, unknown>;
@@ -19,13 +19,13 @@ test("the core package exposes only its built root as a public provenance-ready 
     },
     {
       name: "@eve-reviewer/core",
-      version: "0.1.0",
+      version: "0.0.0-bootstrap.0",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
       dependencies: { diff: "9.0.0", typebox: "1.3.6" },
-      publishConfig: { access: "public", provenance: true },
+      publishConfig: { access: "public", provenance: false },
     },
   );
 });
