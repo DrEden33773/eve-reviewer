@@ -124,8 +124,8 @@ function checkPackedManifests(coreTarball, extensionTarball) {
     {
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/core",
-      publishConfig: { access: "public", provenance: false },
-      version: "0.0.0-bootstrap.0",
+      publishConfig: { access: "public", provenance: true },
+      version: "0.1.0",
     },
   );
   assert.deepEqual(
@@ -138,12 +138,12 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       version: extension.version,
     },
     {
-      dependencies: { "@eve-reviewer/core": "0.0.0-bootstrap.0" },
+      dependencies: { "@eve-reviewer/core": "0.1.0" },
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/adam-extension",
       peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
-      publishConfig: { access: "public", provenance: false },
-      version: "0.0.0-bootstrap.0",
+      publishConfig: { access: "public", provenance: true },
+      version: "0.1.0",
     },
   );
 }
@@ -195,7 +195,5 @@ function freshInstall(coreTarball, extensionTarball) {
       "utf8",
     ),
   );
-  assert.deepEqual(installedExtension.dependencies, {
-    "@eve-reviewer/core": "0.0.0-bootstrap.0",
-  });
+  assert.deepEqual(installedExtension.dependencies, { "@eve-reviewer/core": "0.1.0" });
 }
