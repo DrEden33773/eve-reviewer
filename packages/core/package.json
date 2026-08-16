@@ -1,6 +1,6 @@
 {
   "name": "@eve-reviewer/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Validated review contracts and deterministic review use case for Eve Reviewer.",
   "type": "module",
   "exports": {

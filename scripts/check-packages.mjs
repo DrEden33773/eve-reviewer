@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  constants,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -15,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoots = ["packages/core", "packages/adam-extension"];
-const offlineTarballs = parseOfflineTarballs(process.argv.slice(2));
+const { offlineTarballs, outputDirectory } = parseArguments(process.argv.slice(2));
 const temporaryRoot = mkdtempSync(join(tmpdir(), "eve-reviewer-package-check-"));
 const packRoot = join(temporaryRoot, "pack");
 const installRoot = join(temporaryRoot, "install");
@@ -31,31 +33,59 @@ try {
   checkArchive(extensionTarball, "@eve-reviewer/adam-extension");
   checkPackedManifests(coreTarball, extensionTarball);
   freshInstall(coreTarball, extensionTarball);
+  exportTarballs(tarballs, outputDirectory);
   process.stdout.write(
-    `${JSON.stringify({ mode: offlineTarballs.length === 0 ? "registry" : "offline", packages: tarballs.map((tarball) => tarball.filename) })}\n`,
+    `${JSON.stringify({ mode: offlineTarballs.length === 0 ? "registry" : "offline", packages: tarballs.map((tarball) => tarball.filename), ...(outputDirectory === undefined ? {} : { outputDirectory }) })}\n`,
   );
 } finally {
   rmSync(temporaryRoot, { force: true, recursive: true });
 }
 
-function parseOfflineTarballs(arguments_) {
-  const tarballs = [];
+function parseArguments(arguments_) {
+  const offlineTarballs = [];
+  let outputDirectory;
   for (let index = 0; index < arguments_.length; index += 1) {
-    if (arguments_[index] !== "--offline-tarball") {
-      throw new TypeError(`Unknown package-check argument: ${arguments_[index]}`);
+    const argument = arguments_[index];
+    if (index === 0 && argument === "--") {
+      continue;
     }
     const candidate = arguments_[index + 1];
-    if (candidate === undefined) {
-      throw new TypeError("--offline-tarball requires a path.");
+    if (argument === "--offline-tarball") {
+      if (candidate === undefined) {
+        throw new TypeError("--offline-tarball requires a path.");
+      }
+      const path = resolve(candidate);
+      if (!existsSync(path)) {
+        throw new TypeError(`Offline tarball is unavailable: ${path}`);
+      }
+      offlineTarballs.push(path);
+      index += 1;
+      continue;
     }
-    const path = resolve(candidate);
-    if (!existsSync(path)) {
-      throw new TypeError(`Offline tarball is unavailable: ${path}`);
+    if (argument === "--output-directory") {
+      if (candidate === undefined) {
+        throw new TypeError("--output-directory requires a path.");
+      }
+      if (outputDirectory !== undefined) {
+        throw new TypeError("--output-directory may be provided only once.");
+      }
+      outputDirectory = resolve(candidate);
+      index += 1;
+      continue;
     }
-    tarballs.push(path);
-    index += 1;
+    throw new TypeError(`Unknown package-check argument: ${argument}`);
   }
-  return tarballs;
+  return { offlineTarballs, outputDirectory };
+}
+
+function exportTarballs(tarballs, outputDirectory) {
+  if (outputDirectory === undefined) {
+    return;
+  }
+  mkdirSync(outputDirectory, { recursive: true });
+  for (const tarball of tarballs) {
+    copyFileSync(tarball.path, join(outputDirectory, tarball.filename), constants.COPYFILE_EXCL);
+  }
 }
 
 function command(executable, arguments_, options = {}) {
@@ -125,7 +155,7 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/core",
       publishConfig: { access: "public", provenance: true },
-      version: "0.1.0",
+      version: "0.1.1",
     },
   );
   assert.deepEqual(
@@ -138,12 +168,12 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       version: extension.version,
     },
     {
-      dependencies: { "@eve-reviewer/core": "0.1.0" },
+      dependencies: { "@eve-reviewer/core": "0.1.1" },
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/adam-extension",
       peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
       publishConfig: { access: "public", provenance: true },
-      version: "0.1.0",
+      version: "0.1.1",
     },
   );
 }
@@ -195,5 +225,5 @@ function freshInstall(coreTarball, extensionTarball) {
       "utf8",
     ),
   );
-  assert.deepEqual(installedExtension.dependencies, { "@eve-reviewer/core": "0.1.0" });
+  assert.deepEqual(installedExtension.dependencies, { "@eve-reviewer/core": "0.1.1" });
 }

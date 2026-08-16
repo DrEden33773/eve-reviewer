@@ -6,7 +6,7 @@ Trusted Eve Reviewer extension for Adam Agent. It registers `eve-reviewer.review
 
 - Node.js 24
 - `@adam-agent/extension-api@0.1.0`
-- `@eve-reviewer/core@0.1.0`
+- `@eve-reviewer/core@0.1.1`
 
 The package exposes one ESM root with the named `activate()` function expected by Adam's Extension Host. Configure it through Adam's extension installation and grant workflow; it does not provide a standalone CLI.
 
