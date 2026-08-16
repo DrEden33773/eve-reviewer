@@ -19,7 +19,7 @@ test("the supported core artifact is public and provenance-ready", () => {
     },
     {
       name: "@eve-reviewer/core",
-      version: "0.1.0",
+      version: "0.1.1",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },

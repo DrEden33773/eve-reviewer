@@ -21,7 +21,7 @@ The current path is intentionally narrow:
 - its strict deterministic evaluation package replays versioned synthetic cases through frozen and current review targets, compares protected coverage exactly, matches findings as an evidence-linked multiset and emits bounded integer metrics from a canonical one-shot command; and
 - its trusted Adam extension Adapter registers `eve-reviewer.review@1`, calls Adam's fixed Biome capability, publishes the canonical Eve result artifact, creates an immutable operation record and returns only bounded terminal references.
 
-The source tree contains release-ready `@eve-reviewer/core@0.1.0` and `@eve-reviewer/adam-extension@0.1.0` package manifests. Those supported versions are not published. The public npm identities currently expose only deprecated, unsupported `0.0.0-bootstrap.0` prereleases; staging and supported publication remain separate Owner-approved release actions.
+The source tree contains release-ready `@eve-reviewer/core@0.1.1` and `@eve-reviewer/adam-extension@0.1.1` package manifests. Those supported versions are not published. The public npm identities currently expose only deprecated, unsupported `0.0.0-bootstrap.0` prereleases; staging and supported publication remain separate Owner-approved release actions.
 
 HTTP, an Eve-owned provider/runtime, queues, databases and a standalone dashboard are not planned for the first integrated path.
 
@@ -36,7 +36,7 @@ pnpm quality:check
 
 Use `pnpm quality:fix` only when an intentional formatting rewrite is desired. The pre-commit hook is check-only.
 
-`pnpm build` emits unbundled Node.js 24 ESM and declarations into each public package's ignored `dist/` directory. The core package exposes one root entry. The Adam extension exposes one root entry with named `activate()` and exact compatibility with `@adam-agent/extension-api@0.1.0` and `@eve-reviewer/core@0.1.0`.
+`pnpm build` emits unbundled Node.js 24 ESM and declarations into each public package's ignored `dist/` directory. The core package exposes one root entry. The Adam extension exposes one root entry with named `activate()` and exact compatibility with `@adam-agent/extension-api@0.1.0` and `@eve-reviewer/core@0.1.1`.
 
 ## Deterministic local review
 

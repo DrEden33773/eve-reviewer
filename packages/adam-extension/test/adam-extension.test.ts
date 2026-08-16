@@ -58,12 +58,12 @@ test("the supported extension artifact pins the matching core with provenance en
     },
     {
       name: "@eve-reviewer/adam-extension",
-      version: "0.1.0",
+      version: "0.1.1",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
-      dependencies: { "@eve-reviewer/core": "workspace:0.1.0" },
+      dependencies: { "@eve-reviewer/core": "workspace:0.1.1" },
       peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
       devDependencies: { "@adam-agent/extension-api": "0.1.0" },
       publishConfig: { access: "public", provenance: true },

@@ -26,11 +26,12 @@ jobs:
           fetch-depth: 0
           ref: refs/tags/${{ inputs.tag }}
       - name: Verify annotated release tag
+        id: release
         run: |
           test "$(git cat-file -t "refs/tags/${RELEASE_TAG}")" = "tag"
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
           node --input-type=module --eval '
-            import { readFileSync } from "node:fs";
+            import { appendFileSync, readFileSync } from "node:fs";
             const manifest = JSON.parse(readFileSync("packages/adam-extension/package.json", "utf8"));
             if (manifest.name !== "@eve-reviewer/adam-extension") {
               throw new Error(`Unexpected package identity: ${manifest.name}`);
@@ -48,6 +49,10 @@ jobs:
             if (manifest.peerDependencies?.["@adam-agent/extension-api"] !== "0.1.0") {
               throw new Error("The extension must retain exact Adam API compatibility.");
             }
+            if (process.env.GITHUB_OUTPUT === undefined) {
+              throw new Error("GITHUB_OUTPUT is unavailable.");
+            }
+            appendFileSync(process.env.GITHUB_OUTPUT, `version=${manifest.version}\n`);
           '
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -65,7 +70,6 @@ jobs:
       - name: Run quality checks
         run: pnpm quality:check
       - name: Check package artifacts
-        run: pnpm package:check
+        run: pnpm package:check -- --output-directory "${{ runner.temp }}/eve-release"
       - name: Stage Adam extension package
-        working-directory: packages/adam-extension
-        run: npm stage publish --access public --tag latest
+        run: npm stage publish "${{ runner.temp }}/eve-release/eve-reviewer-adam-extension-${{ steps.release.outputs.version }}.tgz" --access public --tag latest
