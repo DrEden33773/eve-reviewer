@@ -1,0 +1,81 @@
+{
+  "name": "@eve-reviewer/adam-extension",
+  "version": "0.1.0",
+  "description": "Trusted Eve Reviewer extension for Adam Agent.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrEden33773/eve-reviewer.git",
+    "directory": "packages/adam-extension"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "adamAgent": {
+    "id": "eve-reviewer",
+    "apiVersion": "0.1.0",
+    "runtime": {
+      "entry": "./dist/index.js"
+    },
+    "capabilities": {
+      "required": [
+        {
+          "id": "adam.analyzer-execution.biome@1",
+          "version": "1.0.0"
+        },
+        {
+          "id": "adam.artifact.publish@1",
+          "version": "1.0.0"
+        },
+        {
+          "id": "adam.storage.records@1",
+          "version": "1.0.0"
+        }
+      ],
+      "optional": []
+    },
+    "contributions": [
+      {
+        "kind": "operation",
+        "id": "eve-reviewer.review@1",
+        "input": {
+          "id": "eve-reviewer.review-request",
+          "version": 1
+        },
+        "output": {
+          "id": "eve-reviewer.operation-result",
+          "version": 1
+        },
+        "progress": {
+          "id": "eve-reviewer.review-progress",
+          "version": 1
+        }
+      }
+    ]
+  },
+  "dependencies": {
+    "@eve-reviewer/core": "workspace:0.1.0"
+  },
+  "peerDependencies": {
+    "@adam-agent/extension-api": "0.1.0"
+  },
+  "devDependencies": {
+    "@adam-agent/extension-api": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
