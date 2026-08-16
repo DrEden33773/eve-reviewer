@@ -21,7 +21,7 @@ jobs:
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - name: Check out release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: refs/tags/${{ inputs.tag }}
@@ -44,7 +44,7 @@ jobs:
             }
           '
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
           registry-url: https://registry.npmjs.org
