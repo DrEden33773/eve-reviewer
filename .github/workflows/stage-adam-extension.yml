@@ -1,0 +1,71 @@
+name: Stage Adam extension package
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Annotated Eve B2 release tag to stage
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  stage-adam-extension:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ inputs.tag }}
+      - name: Verify annotated release tag
+        run: |
+          test "$(git cat-file -t "refs/tags/${RELEASE_TAG}")" = "tag"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const manifest = JSON.parse(readFileSync("packages/adam-extension/package.json", "utf8"));
+            if (manifest.name !== "@eve-reviewer/adam-extension") {
+              throw new Error(`Unexpected package identity: ${manifest.name}`);
+            }
+            if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) {
+              throw new Error(`Only a supported stable version may be staged: ${manifest.version}`);
+            }
+            const expectedTag = `eve-b2-v${manifest.version}`;
+            if (process.env.RELEASE_TAG !== expectedTag) {
+              throw new Error(`Expected ${expectedTag}, received ${process.env.RELEASE_TAG}`);
+            }
+            if (manifest.dependencies?.["@eve-reviewer/core"] !== `workspace:${manifest.version}`) {
+              throw new Error("The extension must pin its matching workspace core version.");
+            }
+            if (manifest.peerDependencies?.["@adam-agent/extension-api"] !== "0.1.0") {
+              throw new Error("The extension must retain exact Adam API compatibility.");
+            }
+          '
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+          registry-url: https://registry.npmjs.org
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Install staged-publishing CLI
+        run: |
+          npm install --global npm@12.0.2
+          test "$(npm --version)" = "12.0.2"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run quality checks
+        run: pnpm quality:check
+      - name: Check package artifacts
+        run: pnpm package:check
+      - name: Stage Adam extension package
+        working-directory: packages/adam-extension
+        run: npm stage publish --access public --tag latest
