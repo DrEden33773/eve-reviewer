@@ -1,13 +1,34 @@
 {
   "name": "@eve-reviewer/core",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Validated review contracts and deterministic review use case for Eve Reviewer.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DrEden33773/eve-reviewer.git",
+    "directory": "packages/core"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
   },
   "dependencies": {
     "diff": "9.0.0",
     "typebox": "1.3.6"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

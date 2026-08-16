@@ -9,17 +9,19 @@
     "pnpm": ">=11.21.0 <12"
   },
   "scripts": {
+    "build": "tsc -p packages/core/tsconfig.build.json && tsc -p packages/adam-extension/tsconfig.build.json",
     "code:check": "biome check .",
     "code:fix": "biome check --write .",
     "evaluation:compare": "node packages/evaluation/src/main.ts",
     "hooks:install": "git config core.hooksPath .githooks",
     "markdown:check": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#dist\" \"#coverage\"",
     "markdown:fix": "markdownlint-cli2 --fix \"**/*.md\" \"#node_modules\" \"#dist\" \"#coverage\"",
+    "package:check": "node scripts/check-packages.mjs",
     "quality:check": "pnpm code:check && pnpm markdown:check && pnpm typecheck && pnpm test",
     "quality:fix": "pnpm code:fix && pnpm markdown:fix",
     "review:fixture": "eve-reviewer --repository example/repository --pull-request 1 --source-root test/fixtures/source test/fixtures/dynamic-eval.diff",
-    "test": "node --test packages/core/test/*.test.ts packages/evaluation/test/*.test.ts apps/cli/test/*.test.ts",
-    "typecheck": "tsc -b --pretty false"
+    "test": "pnpm build && node --test packages/core/test/*.test.ts packages/adam-extension/test/*.test.ts packages/evaluation/test/*.test.ts apps/cli/test/*.test.ts",
+    "typecheck": "pnpm build && tsc -b --pretty false"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.8",
