@@ -2,8 +2,6 @@
 
 Validated request and result contracts plus the deterministic review use case used by Eve Reviewer adapters.
 
-Version `0.0.0-bootstrap.0` exists only to establish and secure the npm package identity under the non-default `bootstrap` tag. It is not a supported release and will be deprecated after identity bootstrap.
-
 ## Runtime
 
 - Node.js 24

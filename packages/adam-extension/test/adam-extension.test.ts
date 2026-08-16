@@ -40,7 +40,7 @@ test("the package manifest declares the exact Eve operation and required Adam ca
   });
 });
 
-test("the extension bootstrap artifact pins the matching core with provenance disabled", () => {
+test("the supported extension artifact pins the matching core with provenance enabled", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
   ) as Record<string, unknown>;
@@ -58,15 +58,15 @@ test("the extension bootstrap artifact pins the matching core with provenance di
     },
     {
       name: "@eve-reviewer/adam-extension",
-      version: "0.0.0-bootstrap.0",
+      version: "0.1.0",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
-      dependencies: { "@eve-reviewer/core": "workspace:0.0.0-bootstrap.0" },
+      dependencies: { "@eve-reviewer/core": "workspace:0.1.0" },
       peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
       devDependencies: { "@adam-agent/extension-api": "0.1.0" },
-      publishConfig: { access: "public", provenance: false },
+      publishConfig: { access: "public", provenance: true },
     },
   );
 });

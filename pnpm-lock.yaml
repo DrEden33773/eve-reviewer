@@ -36,7 +36,7 @@ importers:
   packages/adam-extension:
     dependencies:
       '@eve-reviewer/core':
-        specifier: workspace:0.0.0-bootstrap.0
+        specifier: workspace:0.1.0
         version: link:../core
     devDependencies:
       '@adam-agent/extension-api':
