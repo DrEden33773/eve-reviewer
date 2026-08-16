@@ -40,13 +40,15 @@ test("the package manifest declares the exact Eve operation and required Adam ca
   });
 });
 
-test("the extension package exposes only its built root and exact verified dependencies", () => {
+test("the extension bootstrap artifact pins the matching core with provenance disabled", () => {
   const manifest = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
   ) as Record<string, unknown>;
 
   assert.deepEqual(
     {
+      name: manifest["name"],
+      version: manifest["version"],
       exports: manifest["exports"],
       files: manifest["files"],
       dependencies: manifest["dependencies"],
@@ -55,14 +57,16 @@ test("the extension package exposes only its built root and exact verified depen
       publishConfig: manifest["publishConfig"],
     },
     {
+      name: "@eve-reviewer/adam-extension",
+      version: "0.0.0-bootstrap.0",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
-      dependencies: { "@eve-reviewer/core": "workspace:0.1.0" },
+      dependencies: { "@eve-reviewer/core": "workspace:0.0.0-bootstrap.0" },
       peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
       devDependencies: { "@adam-agent/extension-api": "0.1.0" },
-      publishConfig: { access: "public", provenance: true },
+      publishConfig: { access: "public", provenance: false },
     },
   );
 });
