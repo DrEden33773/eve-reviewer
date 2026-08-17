@@ -40,8 +40,8 @@ importers:
         version: link:../core
     devDependencies:
       '@adam-agent/extension-api':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.2.0
+        version: 0.2.0
 
   packages/core:
     dependencies:
@@ -63,8 +63,8 @@ importers:
 
 packages:
 
-  '@adam-agent/extension-api@0.1.0':
-    resolution: {integrity: sha512-cMuLQqfxd4ThLltoBnEhKyoH7EhWEhyJS4ki3n4v9NuggXvbykXzK7572xb92o/Fk2KXSZLHA8gmTS6i57r0tw==}
+  '@adam-agent/extension-api@0.2.0':
+    resolution: {integrity: sha512-UMyt7eYz6wgjM4bWamqAbkOTJuJs6v8UW0UoYcfSQ0CTqqaRJvE+xbrnSGIuphLwpQ/F+HkPF6fiO5mwIqu3Fw==}
     engines: {node: '>=24.0.0 <25'}
 
   '@biomejs/biome@2.5.8':
@@ -575,7 +575,7 @@ packages:
 
 snapshots:
 
-  '@adam-agent/extension-api@0.1.0':
+  '@adam-agent/extension-api@0.2.0':
     dependencies:
       semver: 7.8.5
       zod: 4.4.3

@@ -18,7 +18,7 @@ test("the package manifest declares the exact Eve operation and required Adam ca
 
   assert.deepEqual(manifest.adamAgent, {
     id: "eve-reviewer",
-    apiVersion: "0.1.0",
+    apiVersion: "0.2.0",
     runtime: { entry: "./dist/index.js" },
     capabilities: {
       required: [
@@ -35,6 +35,7 @@ test("the package manifest declares the exact Eve operation and required Adam ca
         input: { id: "eve-reviewer.review-request", version: 1 },
         output: { id: "eve-reviewer.operation-result", version: 1 },
         progress: { id: "eve-reviewer.review-progress", version: 1 },
+        recovery: { version: 1 },
       },
     ],
   });
@@ -58,14 +59,14 @@ test("the supported extension artifact pins the matching core with provenance en
     },
     {
       name: "@eve-reviewer/adam-extension",
-      version: "0.1.1",
+      version: "0.2.0",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
       dependencies: { "@eve-reviewer/core": "workspace:0.1.1" },
-      peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
-      devDependencies: { "@adam-agent/extension-api": "0.1.0" },
+      peerDependencies: { "@adam-agent/extension-api": "0.2.0" },
+      devDependencies: { "@adam-agent/extension-api": "0.2.0" },
       publishConfig: { access: "public", provenance: true },
     },
   );
@@ -77,7 +78,7 @@ test("activate registers the versioned Eve review operation", async () => {
   let registration: ExtensionOperationRegistration | undefined;
   const context = {
     compatibility: {
-      api: { hostVersion: "0.1.0", requestedVersion: "0.1.0" },
+      api: { hostVersion: "0.2.0", requestedVersion: "0.2.0" },
       capabilities: {
         optional: [],
         required: [
@@ -107,7 +108,7 @@ test("activate registers the versioned Eve review operation", async () => {
     extension: {
       id: "eve-reviewer",
       packageName: "@eve-reviewer/adam-extension",
-      version: "0.1.0",
+      version: "0.2.0",
     },
     registerOperation(value) {
       registration = value;
@@ -133,11 +134,248 @@ test("activate registers the versioned Eve review operation", async () => {
   );
 });
 
+test("reconciliation reconstructs completed Eve output from an immutable record", async () => {
+  const registration = registeredReviewOperation();
+  assert.ok(registration.reconcile);
+  const operationId = "operation-recovery-completed";
+  const provenance = {
+    contributionId: "eve-reviewer.review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.2.0",
+    projectId: "sha256:project",
+  } as const;
+  const record = {
+    byteCount: 512,
+    contract: { id: "eve-reviewer.operation-record", version: 1 },
+    digest: `sha256:${"a".repeat(64)}`,
+    key: `operations/${operationId}`,
+    provenance: { ...provenance, operationId },
+    value: {
+      kind: "eve-reviewer.operation-record",
+      schemaVersion: 1,
+      artifact: {
+        contract: { id: "eve-reviewer.review-result", version: 1 },
+        id: "sha256:report",
+      },
+      result: {
+        kind: "eve-reviewer.review-result",
+        schemaVersion: 1,
+        payload: {
+          ok: false,
+          error: { code: "cancelled", stage: "start" },
+        },
+      },
+    },
+  } as const;
+  const requestedKeys: string[] = [];
+  let artifactReads = 0;
+
+  const result = await registration.reconcile(reviewRequest(), {
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    evidence: {
+      artifacts: {
+        async read() {
+          artifactReads += 1;
+          return undefined;
+        },
+      },
+      records: {
+        async get(key: string) {
+          requestedKeys.push(key);
+          return record;
+        },
+      },
+    },
+    operationId,
+    provenance,
+    signal: new AbortController().signal,
+  });
+
+  assert.deepEqual(
+    { artifactReads, requestedKeys, result },
+    {
+      artifactReads: 0,
+      requestedKeys: [`operations/${operationId}`],
+      result: {
+        status: "completed",
+        output: {
+          kind: "eve-reviewer.operation-result",
+          schemaVersion: 1,
+          payload: {
+            ok: false,
+            artifact: {
+              contract: { id: "eve-reviewer.review-result", version: 1 },
+              id: "sha256:report",
+            },
+            record: {
+              contract: { id: "eve-reviewer.operation-record", version: 1 },
+              digest: `sha256:${"a".repeat(64)}`,
+              key: `operations/${operationId}`,
+            },
+            summary: { error: "cancelled" },
+          },
+        },
+      },
+    },
+  );
+});
+
+test("reconciliation requires inspection when the Eve operation record is missing", async () => {
+  const registration = registeredReviewOperation();
+  assert.ok(registration.reconcile);
+  const operationId = "operation-recovery-missing";
+  const requestedKeys: string[] = [];
+  let artifactReads = 0;
+
+  const result = await registration.reconcile(reviewRequest(), {
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    evidence: {
+      artifacts: {
+        async read() {
+          artifactReads += 1;
+          return undefined;
+        },
+      },
+      records: {
+        async get(key: string) {
+          requestedKeys.push(key);
+          return undefined;
+        },
+      },
+    },
+    operationId,
+    provenance: {
+      contributionId: "eve-reviewer.review@1",
+      extensionId: "eve-reviewer",
+      extensionVersion: "0.2.0",
+      projectId: "sha256:project",
+    },
+    signal: new AbortController().signal,
+  });
+
+  assert.deepEqual(
+    { artifactReads, requestedKeys, result },
+    {
+      artifactReads: 0,
+      requestedKeys: [`operations/${operationId}`],
+      result: {
+        status: "inspection_required",
+        message: "The Eve operation record is unavailable.",
+      },
+    },
+  );
+});
+
+test("reconciliation preserves an insufficient Eve record as inspection evidence", async () => {
+  const registration = registeredReviewOperation();
+  assert.ok(registration.reconcile);
+  const operationId = "operation-recovery-inspection";
+  const provenance = {
+    contributionId: "eve-reviewer.review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.2.0",
+    projectId: "sha256:project",
+  } as const;
+  const recordSummary = {
+    byteCount: 384,
+    contract: { id: "eve-reviewer.operation-record", version: 1 },
+    digest: `sha256:${"b".repeat(64)}`,
+    key: `operations/${operationId}`,
+    provenance: { ...provenance, operationId },
+  } as const;
+
+  const result = await registration.reconcile(reviewRequest(), {
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    evidence: {
+      artifacts: { async read() {} },
+      records: {
+        async get() {
+          return {
+            ...recordSummary,
+            value: {
+              kind: "eve-reviewer.operation-record",
+              schemaVersion: 1,
+              artifact: {
+                contract: { id: "eve-reviewer.review-result", version: 1 },
+                id: "sha256:report",
+              },
+            },
+          };
+        },
+      },
+    },
+    operationId,
+    provenance,
+    signal: new AbortController().signal,
+  });
+
+  assert.deepEqual(result, {
+    status: "inspection_required",
+    message: "The Eve operation record cannot prove completion.",
+    evidence: [{ type: "record", record: recordSummary }],
+  });
+});
+
+test("reconciliation does not accept a different record contract as completion proof", async () => {
+  const registration = registeredReviewOperation();
+  assert.ok(registration.reconcile);
+  const operationId = "operation-recovery-contract";
+  const provenance = {
+    contributionId: "eve-reviewer.review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.2.0",
+    projectId: "sha256:project",
+  } as const;
+  const recordSummary = {
+    byteCount: 512,
+    contract: { id: "another.operation-record", version: 1 },
+    digest: `sha256:${"c".repeat(64)}`,
+    key: `operations/${operationId}`,
+    provenance: { ...provenance, operationId },
+  } as const;
+
+  const result = await registration.reconcile(reviewRequest(), {
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    evidence: {
+      artifacts: { async read() {} },
+      records: {
+        async get() {
+          return {
+            ...recordSummary,
+            value: {
+              kind: "eve-reviewer.operation-record",
+              schemaVersion: 1,
+              artifact: {
+                contract: { id: "eve-reviewer.review-result", version: 1 },
+                id: "sha256:report",
+              },
+              result: {
+                kind: "eve-reviewer.review-result",
+                schemaVersion: 1,
+                payload: { ok: false, error: { code: "cancelled", stage: "start" } },
+              },
+            },
+          };
+        },
+      },
+    },
+    operationId,
+    provenance,
+    signal: new AbortController().signal,
+  });
+
+  assert.deepEqual(result, {
+    status: "inspection_required",
+    message: "The Eve operation record cannot prove completion.",
+    evidence: [{ type: "record", record: recordSummary }],
+  });
+});
+
 test("the review input codec rejects unsupported Eve schema versions", async () => {
   let registration: ExtensionOperationRegistration | undefined;
   const context = {
     compatibility: {
-      api: { hostVersion: "0.1.0", requestedVersion: "0.1.0" },
+      api: { hostVersion: "0.2.0", requestedVersion: "0.2.0" },
       capabilities: { optional: [], required: [] },
     },
     configuration: null,
@@ -145,7 +383,7 @@ test("the review input codec rejects unsupported Eve schema versions", async () 
     extension: {
       id: "eve-reviewer",
       packageName: "@eve-reviewer/adam-extension",
-      version: "0.1.0",
+      version: "0.2.0",
     },
     registerOperation(value) {
       registration = value;
@@ -178,7 +416,7 @@ test("a successful review durably publishes its report before returning small re
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.1.0",
+    extensionVersion: "0.2.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-1";
@@ -364,7 +602,7 @@ test("an artifact failure prevents record creation and terminal success", async 
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.1.0",
+    extensionVersion: "0.2.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-artifact-failure";
@@ -429,7 +667,7 @@ test("an invalid artifact summary prevents record creation and terminal success"
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.1.0",
+    extensionVersion: "0.2.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-invalid-artifact";
@@ -499,7 +737,7 @@ test("an invalid record summary prevents terminal success", async () => {
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.1.0",
+    extensionVersion: "0.2.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-invalid-record";
@@ -993,7 +1231,7 @@ function registeredReviewOperation(): ExtensionOperationRegistration {
   let registration: ExtensionOperationRegistration | undefined;
   activate({
     compatibility: {
-      api: { hostVersion: "0.1.0", requestedVersion: "0.1.0" },
+      api: { hostVersion: "0.2.0", requestedVersion: "0.2.0" },
       capabilities: { optional: [], required: [] },
     },
     configuration: null,
@@ -1001,7 +1239,7 @@ function registeredReviewOperation(): ExtensionOperationRegistration {
     extension: {
       id: "eve-reviewer",
       packageName: "@eve-reviewer/adam-extension",
-      version: "0.1.0",
+      version: "0.2.0",
     },
     registerOperation(value) {
       registration = value;
@@ -1118,7 +1356,7 @@ async function reviewResultForBiomeReport(
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.1.0",
+    extensionVersion: "0.2.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-mapping";

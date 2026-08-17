@@ -1,6 +1,6 @@
 {
   "name": "@eve-reviewer/adam-extension",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Trusted Eve Reviewer extension for Adam Agent.",
   "type": "module",
   "exports": {
@@ -25,7 +25,7 @@
   },
   "adamAgent": {
     "id": "eve-reviewer",
-    "apiVersion": "0.1.0",
+    "apiVersion": "0.2.0",
     "runtime": {
       "entry": "./dist/index.js"
     },
@@ -61,6 +61,9 @@
         "progress": {
           "id": "eve-reviewer.review-progress",
           "version": 1
+        },
+        "recovery": {
+          "version": 1
         }
       }
     ]
@@ -69,10 +72,10 @@
     "@eve-reviewer/core": "workspace:0.1.1"
   },
   "peerDependencies": {
-    "@adam-agent/extension-api": "0.1.0"
+    "@adam-agent/extension-api": "0.2.0"
   },
   "devDependencies": {
-    "@adam-agent/extension-api": "0.1.0"
+    "@adam-agent/extension-api": "0.2.0"
   },
   "publishConfig": {
     "access": "public",

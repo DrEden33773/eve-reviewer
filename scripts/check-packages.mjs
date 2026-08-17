@@ -171,9 +171,9 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       dependencies: { "@eve-reviewer/core": "0.1.1" },
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/adam-extension",
-      peerDependencies: { "@adam-agent/extension-api": "0.1.0" },
+      peerDependencies: { "@adam-agent/extension-api": "0.2.0" },
       publishConfig: { access: "public", provenance: true },
-      version: "0.1.1",
+      version: "0.2.0",
     },
   );
 }
@@ -186,7 +186,7 @@ function freshInstall(coreTarball, extensionTarball) {
   );
   const dependencies =
     offlineTarballs.length === 0
-      ? ["@adam-agent/extension-api@0.1.0"]
+      ? ["@adam-agent/extension-api@0.2.0"]
       : ["--offline", ...offlineTarballs];
   command(
     "npm",
