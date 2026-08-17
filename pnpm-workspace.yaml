@@ -2,4 +2,4 @@ packages:
   - "apps/*"
   - "packages/*"
 minimumReleaseAgeExclude:
-  - '@adam-agent/extension-api@0.1.0'
+  - '@adam-agent/extension-api@0.2.0'

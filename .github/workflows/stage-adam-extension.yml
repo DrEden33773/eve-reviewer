@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Annotated Eve B2 release tag to stage
+        description: Annotated Eve B4 release tag to stage
         required: true
         type: string
 
@@ -39,14 +39,14 @@ jobs:
             if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) {
               throw new Error(`Only a supported stable version may be staged: ${manifest.version}`);
             }
-            const expectedTag = `eve-b2-v${manifest.version}`;
+            const expectedTag = `eve-b4-v${manifest.version}`;
             if (process.env.RELEASE_TAG !== expectedTag) {
               throw new Error(`Expected ${expectedTag}, received ${process.env.RELEASE_TAG}`);
             }
-            if (manifest.dependencies?.["@eve-reviewer/core"] !== `workspace:${manifest.version}`) {
-              throw new Error("The extension must pin its matching workspace core version.");
+            if (manifest.dependencies?.["@eve-reviewer/core"] !== "workspace:0.1.1") {
+              throw new Error("The recovery extension must pin its verified core version.");
             }
-            if (manifest.peerDependencies?.["@adam-agent/extension-api"] !== "0.1.0") {
+            if (manifest.peerDependencies?.["@adam-agent/extension-api"] !== "0.2.0") {
               throw new Error("The extension must retain exact Adam API compatibility.");
             }
             if (process.env.GITHUB_OUTPUT === undefined) {

@@ -16,11 +16,15 @@ import {
   type ExtensionContractResult,
   type ExtensionJsonValue,
   type ExtensionOperationContext,
+  type ExtensionOperationReconciliationContext,
+  type ExtensionOperationReconciliationResult,
+  type ExtensionRecordSummary,
 } from "@adam-agent/extension-api";
 import {
   type AnalyzeReviewInput,
   createReviewUseCase,
   type ReviewRequestEnvelope,
+  type ReviewResultEnvelope,
   reviewContractV1,
 } from "@eve-reviewer/core";
 import {
@@ -35,6 +39,13 @@ const reportContract = { id: "eve-reviewer.review-result", version: 1 } as const
 const recordContract = { id: "eve-reviewer.operation-record", version: 1 } as const;
 
 type RuntimeRecord = Record<string, unknown>;
+type OperationIdentity = Pick<ExtensionOperationContext, "operationId" | "provenance">;
+type ArtifactReference = { readonly contract: typeof reportContract; readonly id: string };
+type RecordReference = {
+  readonly contract: typeof recordContract;
+  readonly digest: string;
+  readonly key: string;
+};
 
 class InvalidBiomeReport extends Error {}
 class InvalidBiomeResponse extends Error {}
@@ -65,7 +76,7 @@ function isNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
-function matchesOperationProvenance(value: unknown, operation: ExtensionOperationContext): boolean {
+function matchesOperationProvenance(value: unknown, operation: OperationIdentity): boolean {
   return (
     isRecord(value) &&
     exactKeys(value, [
@@ -90,6 +101,52 @@ function matchesContract(value: unknown, expected: { id: string; version: number
     value["id"] === expected.id &&
     value["version"] === expected.version
   );
+}
+
+function isContractReference(value: unknown): value is { id: string; version: number } {
+  return (
+    isRecord(value) &&
+    exactKeys(value, ["id", "version"]) &&
+    typeof value["id"] === "string" &&
+    value["id"].length > 0 &&
+    isPositiveInteger(value["version"])
+  );
+}
+
+function operationResult(
+  result: ReviewResultEnvelope,
+  artifact: ArtifactReference,
+  record: RecordReference,
+): ExtensionJsonValue {
+  return {
+    kind: "eve-reviewer.operation-result",
+    schemaVersion: 1,
+    payload: {
+      ok: result.payload.ok,
+      artifact,
+      record,
+      summary: result.payload.ok
+        ? {
+            coverage: result.payload.report.coverage.status,
+            findings: result.payload.report.findings.length,
+            risk: result.payload.report.risk,
+          }
+        : { error: result.payload.error.code },
+    },
+  };
+}
+
+function inspectionRequired(
+  record?: ExtensionRecordSummary,
+): ExtensionOperationReconciliationResult {
+  return {
+    status: "inspection_required",
+    message:
+      record === undefined
+        ? "The Eve operation record is unavailable."
+        : "The Eve operation record cannot prove completion.",
+    ...(record === undefined ? {} : { evidence: [{ type: "record", record }] }),
+  };
 }
 
 function validatedBiomeReport(
@@ -347,22 +404,70 @@ async function executeReview(request: unknown, operation: ExtensionOperationCont
     operation,
     recordKey,
   );
-  const summary = result.payload.ok
-    ? {
-        coverage: result.payload.report.coverage.status,
-        findings: result.payload.report.findings.length,
-        risk: result.payload.report.risk,
-      }
-    : { error: result.payload.error.code };
+  return operationResult(result, artifactReference, record);
+}
+
+async function reconcileReview(
+  _request: unknown,
+  operation: ExtensionOperationReconciliationContext,
+): Promise<ExtensionOperationReconciliationResult> {
+  const recordKey = `operations/${operation.operationId}`;
+  const record: unknown = await operation.evidence.records.get(recordKey);
+  if (record === undefined) {
+    return inspectionRequired();
+  }
+  if (
+    !isRecord(record) ||
+    !exactKeys(record, ["byteCount", "contract", "digest", "key", "provenance", "value"]) ||
+    !isNonNegativeInteger(record["byteCount"]) ||
+    !isContractReference(record["contract"]) ||
+    typeof record["digest"] !== "string" ||
+    record["digest"].length === 0 ||
+    record["key"] !== recordKey ||
+    !matchesOperationProvenance(record["provenance"], operation)
+  ) {
+    throw new Error("Eve recovery record is invalid.");
+  }
+  const recordSummary = {
+    byteCount: record["byteCount"],
+    contract: record["contract"],
+    digest: record["digest"],
+    key: recordKey,
+    provenance: { ...operation.provenance, operationId: operation.operationId },
+  };
+  if (!matchesContract(recordSummary.contract, recordContract)) {
+    return inspectionRequired(recordSummary);
+  }
+  const value = record["value"];
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ["kind", "schemaVersion", "artifact", "result"]) ||
+    value["kind"] !== "eve-reviewer.operation-record" ||
+    value["schemaVersion"] !== 1
+  ) {
+    return inspectionRequired(recordSummary);
+  }
+  const artifact = value["artifact"];
+  if (
+    !isRecord(artifact) ||
+    !exactKeys(artifact, ["contract", "id"]) ||
+    !matchesContract(artifact["contract"], reportContract) ||
+    typeof artifact["id"] !== "string" ||
+    artifact["id"].length === 0
+  ) {
+    return inspectionRequired(recordSummary);
+  }
+  const decoded = reviewContractV1.decodeResult(value["result"]);
+  if (!decoded.ok) {
+    return inspectionRequired(recordSummary);
+  }
   return {
-    kind: "eve-reviewer.operation-result",
-    schemaVersion: 1,
-    payload: {
-      ok: result.payload.ok,
-      artifact: artifactReference,
-      record,
-      summary,
-    },
+    status: "completed",
+    output: operationResult(
+      decoded.value,
+      { contract: reportContract, id: artifact["id"] },
+      { contract: recordContract, digest: recordSummary.digest, key: recordKey },
+    ),
   };
 }
 
@@ -587,5 +692,6 @@ export function activate(context: ExtensionActivationContext): void {
     output: operationResultCodec,
     progress: reviewProgressCodec,
     execute: executeReview,
+    reconcile: reconcileReview,
   });
 }

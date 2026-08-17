@@ -1,11 +1,11 @@
 # `@eve-reviewer/adam-extension`
 
-Trusted Eve Reviewer extension for Adam Agent. It registers `eve-reviewer.review@1`, runs the fixed Adam Biome capability, publishes the canonical Eve report artifact, and creates an immutable operation record before returning a small terminal result.
+Trusted Eve Reviewer extension for Adam Agent. It registers `eve-reviewer.review@1`, runs the fixed Adam Biome capability, publishes the canonical Eve report artifact, and creates an immutable operation record before returning a small terminal result. Its read-only recovery hook can reconstruct that terminal result from the exact immutable record after a Host restart without rerunning review or repeating effects.
 
 ## Compatibility
 
 - Node.js 24
-- `@adam-agent/extension-api@0.1.0`
+- `@adam-agent/extension-api@0.2.0`
 - `@eve-reviewer/core@0.1.1`
 
 The package exposes one ESM root with the named `activate()` function expected by Adam's Extension Host. Configure it through Adam's extension installation and grant workflow; it does not provide a standalone CLI.
