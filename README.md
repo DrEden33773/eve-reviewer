@@ -19,9 +19,9 @@ The current path is intentionally narrow:
 - its exported stateless in-memory JSON Adapter decodes a request and returns canonical compact JSON without retaining review state;
 - its Linux CLI Adapter runs pinned Biome asynchronously with bounded source, stdout, stderr and SARIF bytes, process-group termination and temporary-resource cleanup;
 - its strict deterministic evaluation package replays versioned synthetic cases through frozen and current review targets, compares protected coverage exactly, matches findings as an evidence-linked multiset and emits bounded integer metrics from a canonical one-shot command; and
-- its trusted Adam extension Adapter registers `eve-reviewer.review@1`, calls Adam's fixed Biome capability, publishes the canonical Eve result artifact, creates an immutable operation record, returns only bounded terminal references and can reconcile that result read-only after a Host restart.
+- its trusted Adam extension Adapter preserves `eve-reviewer.review@1` and adds `eve-reviewer.local-worktree-review@1`, maps Adam's exact generic project-change snapshot to an Eve-owned local-worktree request inside `execute()`, calls Adam's fixed Biome capability, publishes the canonical Eve result artifact, creates an immutable operation record, returns only bounded terminal references and can reconcile either result read-only after a Host restart.
 
-The source tree matches the supported public [`@eve-reviewer/core@0.1.1`](https://www.npmjs.com/package/@eve-reviewer/core/v/0.1.1) and [`@eve-reviewer/adam-extension@0.2.0`](https://www.npmjs.com/package/@eve-reviewer/adam-extension/v/0.2.0) releases. The independently versioned Adapter depends exactly on core `0.1.1`, declares exact peer compatibility with `@adam-agent/extension-api@0.2.0`, carries npm provenance and passes fresh exact-registry installation plus real Adam Host process-restart recovery conformance. Deprecated, unsupported `0.0.0-bootstrap.0` prereleases remain identified by `bootstrap`.
+The source tree defines `@eve-reviewer/core@0.2.0` and independently versioned `@eve-reviewer/adam-extension@0.3.0`; the Adapter depends exactly on core `0.2.0` and declares exact peer compatibility with `@adam-agent/extension-api@0.3.0`. Supported releases on the [`@eve-reviewer/core`](https://www.npmjs.com/package/@eve-reviewer/core) and [`@eve-reviewer/adam-extension`](https://www.npmjs.com/package/@eve-reviewer/adam-extension) package pages carry npm provenance and are gated by fresh exact-registry installation plus real Adam Host conformance. Deprecated, unsupported `0.0.0-bootstrap.0` prereleases remain identified by `bootstrap`.
 
 HTTP, an Eve-owned provider/runtime, queues, databases and a standalone dashboard are not planned for the first integrated path.
 
@@ -36,7 +36,7 @@ pnpm quality:check
 
 Use `pnpm quality:fix` only when an intentional formatting rewrite is desired. The pre-commit hook is check-only.
 
-`pnpm build` emits unbundled Node.js 24 ESM and declarations into each public package's ignored `dist/` directory. The core package exposes one root entry. The Adam extension exposes one root entry with named `activate()` and exact compatibility with `@adam-agent/extension-api@0.2.0` and `@eve-reviewer/core@0.1.1`.
+`pnpm build` emits unbundled Node.js 24 ESM and declarations into each public package's ignored `dist/` directory. The core package exposes one root entry. The Adam extension exposes one root entry with named `activate()` and exact compatibility with `@adam-agent/extension-api@0.3.0` and `@eve-reviewer/core@0.2.0`.
 
 ## Deterministic local review
 

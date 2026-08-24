@@ -11,14 +11,14 @@ import {
   parseExtensionPackageManifest,
 } from "@adam-agent/extension-api";
 
-test("the package manifest declares the exact Eve operation and required Adam capabilities", () => {
+test("the package manifest preserves remote review and adds one project-change review command", () => {
   const manifest = parseExtensionPackageManifest(
     JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")),
   );
 
   assert.deepEqual(manifest.adamAgent, {
     id: "eve-reviewer",
-    apiVersion: "0.2.0",
+    apiVersion: "0.3.0",
     runtime: { entry: "./dist/index.js" },
     capabilities: {
       required: [
@@ -35,6 +35,22 @@ test("the package manifest declares the exact Eve operation and required Adam ca
         input: { id: "eve-reviewer.review-request", version: 1 },
         output: { id: "eve-reviewer.operation-result", version: 1 },
         progress: { id: "eve-reviewer.review-progress", version: 1 },
+        recovery: { version: 1 },
+      },
+      {
+        kind: "operation",
+        id: "eve-reviewer.local-worktree-review@1",
+        input: { id: "adam.project-change-snapshot", version: 1 },
+        output: { id: "eve-reviewer.operation-result", version: 1 },
+        progress: { id: "eve-reviewer.review-progress", version: 1 },
+        command: {
+          id: "eve-reviewer.local-worktree-review",
+          version: 1,
+          name: "review",
+          title: "Review project changes",
+        },
+        inputSource: { id: "project_changes", version: 1 },
+        report: { id: "eve-reviewer.review-result", version: 1 },
         recovery: { version: 1 },
       },
     ],
@@ -59,14 +75,14 @@ test("the supported extension artifact pins the matching core with provenance en
     },
     {
       name: "@eve-reviewer/adam-extension",
-      version: "0.2.0",
+      version: "0.3.0",
       exports: {
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
-      dependencies: { "@eve-reviewer/core": "workspace:0.1.1" },
-      peerDependencies: { "@adam-agent/extension-api": "0.2.0" },
-      devDependencies: { "@adam-agent/extension-api": "0.2.0" },
+      dependencies: { "@eve-reviewer/core": "workspace:0.2.0" },
+      peerDependencies: { "@adam-agent/extension-api": "0.3.0" },
+      devDependencies: { "@adam-agent/extension-api": "0.3.0" },
       publishConfig: { access: "public", provenance: true },
     },
   );
@@ -74,11 +90,11 @@ test("the supported extension artifact pins the matching core with provenance en
 
 import { activate } from "@eve-reviewer/adam-extension";
 
-test("activate registers the versioned Eve review operation", async () => {
-  let registration: ExtensionOperationRegistration | undefined;
+test("activate preserves remote review and registers local worktree review", async () => {
+  const registrations: ExtensionOperationRegistration[] = [];
   const context = {
     compatibility: {
-      api: { hostVersion: "0.2.0", requestedVersion: "0.2.0" },
+      api: { hostVersion: "0.3.0", requestedVersion: "0.3.0" },
       capabilities: {
         optional: [],
         required: [
@@ -108,29 +124,36 @@ test("activate registers the versioned Eve review operation", async () => {
     extension: {
       id: "eve-reviewer",
       packageName: "@eve-reviewer/adam-extension",
-      version: "0.2.0",
+      version: "0.3.0",
     },
     registerOperation(value) {
-      registration = value;
+      registrations.push(value);
     },
   } satisfies ExtensionActivationContext;
 
   await activate(context);
 
-  assert.ok(registration);
   assert.deepEqual(
-    {
+    registrations.map((registration) => ({
       id: registration.id,
       input: { id: registration.input.id, version: registration.input.version },
       output: { id: registration.output.id, version: registration.output.version },
       progress: { id: registration.progress.id, version: registration.progress.version },
-    },
-    {
-      id: "eve-reviewer.review@1",
-      input: { id: "eve-reviewer.review-request", version: 1 },
-      output: { id: "eve-reviewer.operation-result", version: 1 },
-      progress: { id: "eve-reviewer.review-progress", version: 1 },
-    },
+    })),
+    [
+      {
+        id: "eve-reviewer.review@1",
+        input: { id: "eve-reviewer.review-request", version: 1 },
+        output: { id: "eve-reviewer.operation-result", version: 1 },
+        progress: { id: "eve-reviewer.review-progress", version: 1 },
+      },
+      {
+        id: "eve-reviewer.local-worktree-review@1",
+        input: { id: "adam.project-change-snapshot", version: 1 },
+        output: { id: "eve-reviewer.operation-result", version: 1 },
+        progress: { id: "eve-reviewer.review-progress", version: 1 },
+      },
+    ],
   );
 });
 
@@ -141,7 +164,7 @@ test("reconciliation reconstructs completed Eve output from an immutable record"
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const record = {
@@ -220,6 +243,143 @@ test("reconciliation reconstructs completed Eve output from an immutable record"
   );
 });
 
+test("local worktree reconciliation reuses its immutable report without execution", async () => {
+  const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
+  assert.ok(registration.reconcile);
+  const operationId = "operation-local-recovery";
+  const provenance = {
+    contributionId: "eve-reviewer.local-worktree-review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.3.0",
+    projectId: "sha256:project",
+  } as const;
+  const analyzer = {
+    tool: "biome",
+    version: "2.5.8",
+    profile: "adam-biome-recommended-v1",
+    rules: ["lint/security/noGlobalEval"],
+  } as const;
+  const record = {
+    byteCount: 1_024,
+    contract: { id: "eve-reviewer.operation-record", version: 1 },
+    digest: `sha256:${"e".repeat(64)}`,
+    key: `operations/${operationId}`,
+    provenance: { ...provenance, operationId },
+    value: {
+      kind: "eve-reviewer.operation-record",
+      schemaVersion: 1,
+      artifact: {
+        contract: { id: "eve-reviewer.review-result", version: 1 },
+        id: "sha256:local-report",
+      },
+      result: {
+        kind: "eve-reviewer.review-result",
+        schemaVersion: 1,
+        payload: {
+          ok: true,
+          report: {
+            subject: {
+              kind: "local-worktree",
+              objectFormat: "sha1",
+              base: {
+                kind: "head",
+                commit: "a".repeat(40),
+                tree: "b".repeat(40),
+              },
+              candidateTree: "c".repeat(40),
+              snapshotDigest: `sha256:${"d".repeat(64)}`,
+            },
+            reviewer: "deterministic-security",
+            summary:
+              "0 findings across 1 changed file; coverage: complete; highest severity: none.",
+            risk: "none",
+            coverage: {
+              status: "complete",
+              files: [
+                {
+                  oldPath: null,
+                  newPath: "src/value.ts",
+                  status: "added",
+                  baseSource: "not-applicable",
+                  headSource: "available",
+                  analyses: [{ analyzer, status: "analyzed", side: "new" }],
+                },
+              ],
+            },
+            analyzers: [analyzer],
+            diagnostics: [],
+            findings: [],
+          },
+        },
+      },
+    },
+  } as const;
+  let recordReads = 0;
+  let artifactReads = 0;
+
+  const result = await registration.reconcile(
+    {
+      kind: "adam.project-change-snapshot",
+      schemaVersion: 1,
+      base: { kind: "head", commit: "a".repeat(40), tree: "b".repeat(40) },
+      candidateTree: "c".repeat(40),
+      capturePolicy: { id: "adam.git-project-changes", objectFormat: "sha1", version: 1 },
+      digest: `sha256:${"d".repeat(64)}`,
+      sources: [],
+      unavailable: [],
+      unifiedDiff: "diff --git a/src/value.ts b/src/value.ts\n",
+    },
+    {
+      deadlineAt: "2099-01-01T00:00:00.000Z",
+      evidence: {
+        artifacts: {
+          async read() {
+            artifactReads += 1;
+            return undefined;
+          },
+        },
+        records: {
+          async get() {
+            recordReads += 1;
+            return record;
+          },
+        },
+      },
+      operationId,
+      provenance,
+      signal: new AbortController().signal,
+    },
+  );
+
+  assert.deepEqual(
+    { artifactReads, recordReads, result },
+    {
+      artifactReads: 0,
+      recordReads: 1,
+      result: {
+        status: "completed",
+        output: {
+          kind: "eve-reviewer.operation-result",
+          schemaVersion: 1,
+          payload: {
+            ok: true,
+            artifact: {
+              contract: { id: "eve-reviewer.review-result", version: 1 },
+              id: "sha256:local-report",
+            },
+            record: {
+              contract: { id: "eve-reviewer.operation-record", version: 1 },
+              digest: `sha256:${"e".repeat(64)}`,
+              key: `operations/${operationId}`,
+            },
+            summary: { coverage: "complete", findings: 0, risk: "none" },
+          },
+        },
+      },
+    },
+  );
+});
+
 test("reconciliation requires inspection when the Eve operation record is missing", async () => {
   const registration = registeredReviewOperation();
   assert.ok(registration.reconcile);
@@ -247,7 +407,7 @@ test("reconciliation requires inspection when the Eve operation record is missin
     provenance: {
       contributionId: "eve-reviewer.review@1",
       extensionId: "eve-reviewer",
-      extensionVersion: "0.2.0",
+      extensionVersion: "0.3.0",
       projectId: "sha256:project",
     },
     signal: new AbortController().signal,
@@ -273,7 +433,7 @@ test("reconciliation preserves an insufficient Eve record as inspection evidence
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const recordSummary = {
@@ -323,7 +483,7 @@ test("reconciliation does not accept a different record contract as completion p
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const recordSummary = {
@@ -375,7 +535,7 @@ test("the review input codec rejects unsupported Eve schema versions", async () 
   let registration: ExtensionOperationRegistration | undefined;
   const context = {
     compatibility: {
-      api: { hostVersion: "0.2.0", requestedVersion: "0.2.0" },
+      api: { hostVersion: "0.3.0", requestedVersion: "0.3.0" },
       capabilities: { optional: [], required: [] },
     },
     configuration: null,
@@ -383,10 +543,12 @@ test("the review input codec rejects unsupported Eve schema versions", async () 
     extension: {
       id: "eve-reviewer",
       packageName: "@eve-reviewer/adam-extension",
-      version: "0.2.0",
+      version: "0.3.0",
     },
     registerOperation(value) {
-      registration = value;
+      if (value.id === "eve-reviewer.review@1") {
+        registration = value;
+      }
     },
   } satisfies ExtensionActivationContext;
 
@@ -416,7 +578,7 @@ test("a successful review durably publishes its report before returning small re
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-1";
@@ -595,6 +757,331 @@ test("a successful review durably publishes its report before returning small re
   );
 });
 
+test("local worktree review maps one Adam snapshot into durable Eve evidence", async () => {
+  const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
+  const snapshot = {
+    base: {
+      commit: "a".repeat(40),
+      kind: "head",
+      tree: "b".repeat(40),
+    },
+    candidateTree: "c".repeat(40),
+    capturePolicy: {
+      id: "adam.git-project-changes",
+      objectFormat: "sha1",
+      version: 1,
+    },
+    digest: `sha256:${"d".repeat(64)}`,
+    kind: "adam.project-change-snapshot",
+    schemaVersion: 1,
+    sources: [
+      {
+        content: "export const value = 1;\n",
+        contentDigest: `sha256:${"e".repeat(64)}`,
+        mode: "100644",
+        path: "src/value.ts",
+        side: "head",
+      },
+    ],
+    unavailable: [],
+    unifiedDiff: [
+      "diff --git a/src/value.ts b/src/value.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/src/value.ts",
+      "@@ -0,0 +1 @@",
+      "+export const value = 1;",
+      "",
+    ].join("\n"),
+  } as const;
+  const decoded = registration.input.decode(snapshot);
+  assert.equal(decoded.ok, true);
+  assert.ok(decoded.ok);
+
+  let analyzerInput: unknown;
+  let artifactBytes: Uint8Array | undefined;
+  const effects: string[] = [];
+  const provenance = {
+    contributionId: "eve-reviewer.local-worktree-review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.3.0",
+    projectId: "sha256:project",
+  } as const;
+  const operationId = "operation-local-review";
+  const context = {
+    budget: {
+      inputBytes: 1_024,
+      outputBytesRemaining: 5_000_000,
+      progressBytesRemaining: 1_000_000,
+      progressRecordsRemaining: 256,
+    },
+    capabilities: {
+      "adam.analyzer-execution.biome@1": {
+        async analyze(input) {
+          effects.push("analyze");
+          analyzerInput = input;
+          return {
+            execution: {
+              analyzer: "biome",
+              analyzerVersion: "2.5.8",
+              exitCode: 0,
+              profile: "adam-biome-recommended-v1",
+              provenance: { ...provenance, operationId },
+            },
+            report: {
+              command: "check",
+              diagnostics: [],
+              summary: { errors: 0, warnings: 0 },
+            },
+          };
+        },
+      },
+      "adam.artifact.publish@1": {
+        async publish(input) {
+          effects.push("artifact");
+          artifactBytes = input.bytes;
+          return {
+            byteCount: input.bytes.byteLength,
+            contract: input.contract,
+            id: "sha256:local-report",
+            mediaType: input.mediaType,
+            provenance: { ...provenance, operationId },
+          };
+        },
+      },
+      "adam.storage.records@1": {
+        async create(input) {
+          effects.push("record");
+          return {
+            byteCount: 512,
+            contract: input.contract,
+            digest: "sha256:local-record",
+            key: input.key,
+            provenance: { ...provenance, operationId },
+          };
+        },
+        async get() {
+          return undefined;
+        },
+        async list() {
+          return { records: [] };
+        },
+      },
+    },
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    diagnostics: [],
+    operationId,
+    provenance,
+    signal: new AbortController().signal,
+    async progress() {},
+  } satisfies ExtensionOperationContext;
+
+  const output = await registration.execute(decoded.value, context);
+
+  assert.ok(artifactBytes);
+  const artifact = JSON.parse(new TextDecoder().decode(artifactBytes)) as {
+    payload: { report: { subject: unknown } };
+  };
+  assert.deepEqual(
+    {
+      analyzerInput,
+      effects,
+      output,
+      subject: artifact.payload.report.subject,
+    },
+    {
+      analyzerInput: {
+        files: [{ content: "export const value = 1;\n", path: "src/value.ts" }],
+        profile: "adam-biome-recommended-v1",
+      },
+      effects: ["analyze", "artifact", "record"],
+      output: {
+        kind: "eve-reviewer.operation-result",
+        schemaVersion: 1,
+        payload: {
+          ok: true,
+          artifact: {
+            contract: { id: "eve-reviewer.review-result", version: 1 },
+            id: "sha256:local-report",
+          },
+          record: {
+            contract: { id: "eve-reviewer.operation-record", version: 1 },
+            digest: "sha256:local-record",
+            key: "operations/operation-local-review",
+          },
+          summary: { coverage: "complete", findings: 0, risk: "none" },
+        },
+      },
+      subject: {
+        kind: "local-worktree",
+        objectFormat: "sha1",
+        base: {
+          kind: "head",
+          commit: "a".repeat(40),
+          tree: "b".repeat(40),
+        },
+        candidateTree: "c".repeat(40),
+        snapshotDigest: `sha256:${"d".repeat(64)}`,
+      },
+    },
+  );
+});
+
+test("local review preserves an unborn binary change as explicit no coverage", async () => {
+  const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
+  const snapshot = {
+    base: { kind: "unborn", tree: "a".repeat(40) },
+    candidateTree: "b".repeat(40),
+    capturePolicy: {
+      id: "adam.git-project-changes",
+      objectFormat: "sha1",
+      version: 1,
+    },
+    digest: `sha256:${"c".repeat(64)}`,
+    kind: "adam.project-change-snapshot",
+    schemaVersion: 1,
+    sources: [],
+    unavailable: [
+      { mode: "100644", path: "assets/logo.png", reason: "binary", side: "base" },
+      { mode: "100644", path: "assets/logo.png", reason: "binary", side: "head" },
+    ],
+    unifiedDiff: [
+      "diff --git a/assets/logo.png b/assets/logo.png",
+      "index 1111111..2222222 100644",
+      "GIT binary patch",
+      "literal 1",
+      "Ic$@<O000310RR91",
+      "",
+      "literal 1",
+      "Ic$@<N000310RR91",
+      "",
+    ].join("\n"),
+  } as const;
+  const decoded = registration.input.decode(snapshot);
+  assert.ok(decoded.ok);
+
+  let analyzerCalls = 0;
+  let artifactBytes: Uint8Array | undefined;
+  const provenance = {
+    contributionId: "eve-reviewer.local-worktree-review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.3.0",
+    projectId: "sha256:project",
+  } as const;
+  const operationId = "operation-local-binary";
+  const context = {
+    budget: {
+      inputBytes: 1_024,
+      outputBytesRemaining: 5_000_000,
+      progressBytesRemaining: 1_000_000,
+      progressRecordsRemaining: 256,
+    },
+    capabilities: {
+      "adam.analyzer-execution.biome@1": {
+        async analyze() {
+          analyzerCalls += 1;
+          throw new Error("Binary content must not reach Biome.");
+        },
+      },
+      "adam.artifact.publish@1": {
+        async publish(input) {
+          artifactBytes = input.bytes;
+          return {
+            byteCount: input.bytes.byteLength,
+            contract: input.contract,
+            id: "sha256:binary-report",
+            mediaType: input.mediaType,
+            provenance: { ...provenance, operationId },
+          };
+        },
+      },
+      "adam.storage.records@1": {
+        async create(input) {
+          return {
+            byteCount: 512,
+            contract: input.contract,
+            digest: "sha256:binary-record",
+            key: input.key,
+            provenance: { ...provenance, operationId },
+          };
+        },
+        async get() {
+          return undefined;
+        },
+        async list() {
+          return { records: [] };
+        },
+      },
+    },
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    diagnostics: [],
+    operationId,
+    provenance,
+    signal: new AbortController().signal,
+    async progress() {},
+  } satisfies ExtensionOperationContext;
+
+  await registration.execute(decoded.value, context);
+
+  assert.ok(artifactBytes);
+  const artifact = JSON.parse(new TextDecoder().decode(artifactBytes)) as {
+    payload: { report: unknown };
+  };
+  assert.deepEqual(
+    { analyzerCalls, report: artifact.payload.report },
+    {
+      analyzerCalls: 0,
+      report: {
+        subject: {
+          kind: "local-worktree",
+          objectFormat: "sha1",
+          base: { kind: "unborn", tree: "a".repeat(40) },
+          candidateTree: "b".repeat(40),
+          snapshotDigest: `sha256:${"c".repeat(64)}`,
+        },
+        reviewer: "deterministic-security",
+        summary: "0 findings across 1 changed file; coverage: no-coverage; highest severity: none.",
+        risk: "none",
+        coverage: {
+          status: "no-coverage",
+          files: [
+            {
+              oldPath: "assets/logo.png",
+              newPath: "assets/logo.png",
+              status: "binary",
+              baseSource: "unavailable",
+              headSource: "unavailable",
+              analyses: [
+                {
+                  analyzer: {
+                    tool: "biome",
+                    version: "2.5.8",
+                    profile: "adam-biome-recommended-v1",
+                    rules: ["lint/security/noGlobalEval"],
+                  },
+                  status: "skipped",
+                  reason: "binary",
+                  side: "new",
+                },
+              ],
+            },
+          ],
+        },
+        analyzers: [
+          {
+            tool: "biome",
+            version: "2.5.8",
+            profile: "adam-biome-recommended-v1",
+            rules: ["lint/security/noGlobalEval"],
+          },
+        ],
+        diagnostics: [],
+        findings: [],
+      },
+    },
+  );
+});
+
 test("an artifact failure prevents record creation and terminal success", async () => {
   const registration = registeredReviewOperation();
   const publishFailure = new Error("artifact unavailable");
@@ -602,7 +1089,7 @@ test("an artifact failure prevents record creation and terminal success", async 
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-artifact-failure";
@@ -667,7 +1154,7 @@ test("an invalid artifact summary prevents record creation and terminal success"
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-invalid-artifact";
@@ -737,7 +1224,7 @@ test("an invalid record summary prevents terminal success", async () => {
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-invalid-record";
@@ -1227,11 +1714,11 @@ test("the review progress codec rejects unknown payload fields", () => {
   );
 });
 
-function registeredReviewOperation(): ExtensionOperationRegistration {
+function registeredReviewOperation(id = "eve-reviewer.review@1"): ExtensionOperationRegistration {
   let registration: ExtensionOperationRegistration | undefined;
   activate({
     compatibility: {
-      api: { hostVersion: "0.2.0", requestedVersion: "0.2.0" },
+      api: { hostVersion: "0.3.0", requestedVersion: "0.3.0" },
       capabilities: { optional: [], required: [] },
     },
     configuration: null,
@@ -1239,10 +1726,12 @@ function registeredReviewOperation(): ExtensionOperationRegistration {
     extension: {
       id: "eve-reviewer",
       packageName: "@eve-reviewer/adam-extension",
-      version: "0.2.0",
+      version: "0.3.0",
     },
     registerOperation(value) {
-      registration = value;
+      if (value.id === id) {
+        registration = value;
+      }
     },
   });
   assert.ok(registration);
@@ -1356,7 +1845,7 @@ async function reviewResultForBiomeReport(
   const provenance = {
     contributionId: "eve-reviewer.review@1",
     extensionId: "eve-reviewer",
-    extensionVersion: "0.2.0",
+    extensionVersion: "0.3.0",
     projectId: "sha256:project",
   } as const;
   const operationId = "operation-mapping";

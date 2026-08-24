@@ -18,13 +18,19 @@ import {
   type ExtensionOperationContext,
   type ExtensionOperationReconciliationContext,
   type ExtensionOperationReconciliationResult,
+  type ExtensionProjectChangeSnapshot,
   type ExtensionRecordSummary,
+  extensionProjectChangeSnapshotCodec,
 } from "@adam-agent/extension-api";
 import {
+  type AnalyzeLocalReviewInput,
   type AnalyzeReviewInput,
+  createLocalReviewUseCase,
   createReviewUseCase,
+  type LocalReviewRequestEnvelope,
   type ReviewRequestEnvelope,
   type ReviewResultEnvelope,
+  type ReviewUseCase,
   reviewContractV1,
 } from "@eve-reviewer/core";
 import {
@@ -307,7 +313,10 @@ function validatedRecordSummary(
   } as const;
 }
 
-async function analyzeWithBiome(input: AnalyzeReviewInput, operation: ExtensionOperationContext) {
+async function analyzeWithBiome(
+  input: AnalyzeReviewInput | AnalyzeLocalReviewInput,
+  operation: ExtensionOperationContext,
+) {
   const sources = supportedHeadSources(input);
   if (sources.length === 0) {
     return [skippedBiomeOutcome(input)];
@@ -338,15 +347,48 @@ async function analyzeWithBiome(input: AnalyzeReviewInput, operation: ExtensionO
   }
 }
 
-async function executeReview(request: unknown, operation: ExtensionOperationContext) {
+function localReviewRequest(snapshot: ExtensionProjectChangeSnapshot): LocalReviewRequestEnvelope {
+  return {
+    kind: "eve-reviewer.local-review-request",
+    schemaVersion: 1,
+    payload: {
+      subject: {
+        kind: "local-worktree",
+        objectFormat: snapshot.capturePolicy.objectFormat,
+        base:
+          snapshot.base.kind === "head"
+            ? {
+                kind: "head",
+                commit: snapshot.base.commit,
+                tree: snapshot.base.tree,
+              }
+            : { kind: "unborn", tree: snapshot.base.tree },
+        candidateTree: snapshot.candidateTree,
+        snapshotDigest: snapshot.digest,
+      },
+      reviewer: "deterministic-security",
+      diff: snapshot.unifiedDiff,
+      sources: {
+        base: snapshot.sources.flatMap((source) =>
+          source.side === "base" ? [{ path: source.path, content: source.content }] : [],
+        ),
+        head: snapshot.sources.flatMap((source) =>
+          source.side === "head" ? [{ path: source.path, content: source.content }] : [],
+        ),
+      },
+    },
+  };
+}
+
+async function executeReviewUseCase(
+  request: unknown,
+  operation: ExtensionOperationContext,
+  review: ReviewUseCase,
+) {
   await operation.progress({
     kind: "eve-reviewer.review-progress",
     schemaVersion: 1,
     payload: { stage: "analyzing" },
-  });
-  const review = createReviewUseCase({
-    analyze: (input) => analyzeWithBiome(input, operation),
-    clock: Date.now,
   });
   const result = await review.review(request, {
     signal: operation.signal,
@@ -405,6 +447,32 @@ async function executeReview(request: unknown, operation: ExtensionOperationCont
     recordKey,
   );
   return operationResult(result, artifactReference, record);
+}
+
+async function executeReview(request: unknown, operation: ExtensionOperationContext) {
+  return await executeReviewUseCase(
+    request,
+    operation,
+    createReviewUseCase({
+      analyze: (input) => analyzeWithBiome(input, operation),
+      clock: Date.now,
+    }),
+  );
+}
+
+async function executeLocalReview(request: unknown, operation: ExtensionOperationContext) {
+  const decoded = extensionProjectChangeSnapshotCodec.decode(request);
+  if (!decoded.ok) {
+    throw new Error("Adam supplied an invalid project-change snapshot.");
+  }
+  return await executeReviewUseCase(
+    localReviewRequest(decoded.value),
+    operation,
+    createLocalReviewUseCase({
+      analyze: (input) => analyzeWithBiome(input, operation),
+      clock: Date.now,
+    }),
+  );
 }
 
 async function reconcileReview(
@@ -692,6 +760,14 @@ export function activate(context: ExtensionActivationContext): void {
     output: operationResultCodec,
     progress: reviewProgressCodec,
     execute: executeReview,
+    reconcile: reconcileReview,
+  });
+  context.registerOperation({
+    id: "eve-reviewer.local-worktree-review@1",
+    input: extensionProjectChangeSnapshotCodec,
+    output: operationResultCodec,
+    progress: reviewProgressCodec,
+    execute: executeLocalReview,
     reconcile: reconcileReview,
   });
 }

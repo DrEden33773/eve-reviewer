@@ -1,9 +1,12 @@
 import type {
+  AnalyzeLocalReviewInput,
   AnalyzeReviewInput,
   AnalyzerDescriptor,
   CandidateFinding,
   SourceSnapshotFile,
 } from "@eve-reviewer/core";
+
+type DeterministicReviewInput = AnalyzeReviewInput | AnalyzeLocalReviewInput;
 
 export const deterministicBiomePolicy = {
   profile: "adam-biome-recommended-v1",
@@ -45,7 +48,7 @@ function analyzerDescriptor(): AnalyzerDescriptor {
   };
 }
 
-export function supportedHeadSources(input: AnalyzeReviewInput): SourceSnapshotFile[] {
+export function supportedHeadSources(input: DeterministicReviewInput): SourceSnapshotFile[] {
   const changedPaths = new Set(
     input.diff.files.flatMap((file) =>
       file.lines
@@ -64,7 +67,7 @@ export function supportedHeadSources(input: AnalyzeReviewInput): SourceSnapshotF
     .toSorted((left, right) => left.path.localeCompare(right.path));
 }
 
-function fileOutcomes(input: AnalyzeReviewInput, analyzedPaths: Set<string>): FileOutcome[] {
+function fileOutcomes(input: DeterministicReviewInput, analyzedPaths: Set<string>): FileOutcome[] {
   const availableHeadPaths = new Set(input.sources.head.map((source) => source.path));
   return input.diff.files.flatMap<FileOutcome>((file) => {
     const path = file.newPath ?? file.oldPath;
@@ -89,7 +92,7 @@ function fileOutcomes(input: AnalyzeReviewInput, analyzedPaths: Set<string>): Fi
   });
 }
 
-function failedFileOutcomes(input: AnalyzeReviewInput) {
+function failedFileOutcomes(input: DeterministicReviewInput) {
   return input.diff.files.flatMap((file) => {
     const path = file.newPath ?? file.oldPath;
     return path === null
@@ -104,7 +107,7 @@ function failedFileOutcomes(input: AnalyzeReviewInput) {
   });
 }
 
-export function skippedBiomeOutcome(input: AnalyzeReviewInput) {
+export function skippedBiomeOutcome(input: DeterministicReviewInput) {
   return {
     kind: "eve-reviewer.analyzer-outcome",
     schemaVersion: 1,
@@ -117,7 +120,7 @@ export function skippedBiomeOutcome(input: AnalyzeReviewInput) {
 }
 
 export function failedBiomeOutcome(
-  input: AnalyzeReviewInput,
+  input: DeterministicReviewInput,
   message:
     | "The Biome broker returned an invalid report."
     | "The Biome broker returned an invalid response.",
@@ -135,7 +138,7 @@ export function failedBiomeOutcome(
 }
 
 export function analyzedBiomeOutcome(
-  input: AnalyzeReviewInput,
+  input: DeterministicReviewInput,
   sources: readonly SourceSnapshotFile[],
   diagnostics: readonly DeterministicBiomeDiagnostic[],
 ) {

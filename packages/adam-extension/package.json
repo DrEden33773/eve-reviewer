@@ -1,6 +1,6 @@
 {
   "name": "@eve-reviewer/adam-extension",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Trusted Eve Reviewer extension for Adam Agent.",
   "type": "module",
   "exports": {
@@ -25,7 +25,7 @@
   },
   "adamAgent": {
     "id": "eve-reviewer",
-    "apiVersion": "0.2.0",
+    "apiVersion": "0.3.0",
     "runtime": {
       "entry": "./dist/index.js"
     },
@@ -65,17 +65,50 @@
         "recovery": {
           "version": 1
         }
+      },
+      {
+        "kind": "operation",
+        "id": "eve-reviewer.local-worktree-review@1",
+        "input": {
+          "id": "adam.project-change-snapshot",
+          "version": 1
+        },
+        "output": {
+          "id": "eve-reviewer.operation-result",
+          "version": 1
+        },
+        "progress": {
+          "id": "eve-reviewer.review-progress",
+          "version": 1
+        },
+        "command": {
+          "id": "eve-reviewer.local-worktree-review",
+          "version": 1,
+          "name": "review",
+          "title": "Review project changes"
+        },
+        "inputSource": {
+          "id": "project_changes",
+          "version": 1
+        },
+        "report": {
+          "id": "eve-reviewer.review-result",
+          "version": 1
+        },
+        "recovery": {
+          "version": 1
+        }
       }
     ]
   },
   "dependencies": {
-    "@eve-reviewer/core": "workspace:0.1.1"
+    "@eve-reviewer/core": "workspace:0.2.0"
   },
   "peerDependencies": {
-    "@adam-agent/extension-api": "0.2.0"
+    "@adam-agent/extension-api": "0.3.0"
   },
   "devDependencies": {
-    "@adam-agent/extension-api": "0.2.0"
+    "@adam-agent/extension-api": "0.3.0"
   },
   "publishConfig": {
     "access": "public",
