@@ -927,6 +927,65 @@ test("local worktree review maps one Adam snapshot into durable Eve evidence", a
   );
 });
 
+test("local review rejects base evidence for an unborn snapshot before effects", async () => {
+  const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
+  const effects: string[] = [];
+  const provenance = {
+    contributionId: "eve-reviewer.local-worktree-review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.3.0",
+    projectId: "sha256:project",
+  } as const;
+
+  await assert.rejects(
+    async () =>
+      await registration.execute(
+        {
+          base: { kind: "unborn", tree: "a".repeat(40) },
+          candidateTree: "b".repeat(40),
+          capturePolicy: {
+            id: "adam.git-project-changes",
+            objectFormat: "sha1",
+            version: 1,
+          },
+          digest: `sha256:${"c".repeat(64)}`,
+          kind: "adam.project-change-snapshot",
+          schemaVersion: 1,
+          sources: [],
+          unavailable: [
+            { mode: "100644", path: "assets/logo.png", reason: "binary", side: "base" },
+          ],
+          unifiedDiff: [
+            "diff --git a/assets/logo.png b/assets/logo.png",
+            "index 1111111..2222222 100644",
+            "Binary files a/assets/logo.png and b/assets/logo.png differ",
+            "",
+          ].join("\n"),
+        },
+        {
+          budget: {
+            inputBytes: 1_024,
+            outputBytesRemaining: 5_000_000,
+            progressBytesRemaining: 1_000_000,
+            progressRecordsRemaining: 256,
+          },
+          capabilities: {},
+          deadlineAt: "2099-01-01T00:00:00.000Z",
+          diagnostics: [],
+          operationId: "operation-inconsistent-unborn",
+          provenance,
+          signal: new AbortController().signal,
+          async progress() {
+            effects.push("progress");
+          },
+        },
+      ),
+    /Adam supplied an inconsistent unborn project-change snapshot\./,
+  );
+
+  assert.deepEqual(effects, []);
+});
+
 test("local review preserves an unborn binary change as explicit no coverage", async () => {
   const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
   const snapshot = {
@@ -941,19 +1000,14 @@ test("local review preserves an unborn binary change as explicit no coverage", a
     kind: "adam.project-change-snapshot",
     schemaVersion: 1,
     sources: [],
-    unavailable: [
-      { mode: "100644", path: "assets/logo.png", reason: "binary", side: "base" },
-      { mode: "100644", path: "assets/logo.png", reason: "binary", side: "head" },
-    ],
+    unavailable: [{ mode: "100644", path: "assets/logo.png", reason: "binary", side: "head" }],
     unifiedDiff: [
       "diff --git a/assets/logo.png b/assets/logo.png",
-      "index 1111111..2222222 100644",
+      "new file mode 100644",
+      "index 0000000..2222222",
       "GIT binary patch",
       "literal 1",
       "Ic$@<O000310RR91",
-      "",
-      "literal 1",
-      "Ic$@<N000310RR91",
       "",
     ].join("\n"),
   } as const;
@@ -1046,10 +1100,10 @@ test("local review preserves an unborn binary change as explicit no coverage", a
           status: "no-coverage",
           files: [
             {
-              oldPath: "assets/logo.png",
+              oldPath: null,
               newPath: "assets/logo.png",
               status: "binary",
-              baseSource: "unavailable",
+              baseSource: "not-applicable",
               headSource: "unavailable",
               analyses: [
                 {

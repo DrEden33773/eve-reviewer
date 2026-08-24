@@ -348,6 +348,12 @@ async function analyzeWithBiome(
 }
 
 function localReviewRequest(snapshot: ExtensionProjectChangeSnapshot): LocalReviewRequestEnvelope {
+  if (
+    snapshot.base.kind === "unborn" &&
+    [...snapshot.sources, ...snapshot.unavailable].some((entry) => entry.side === "base")
+  ) {
+    throw new Error("Adam supplied an inconsistent unborn project-change snapshot.");
+  }
   return {
     kind: "eve-reviewer.local-review-request",
     schemaVersion: 1,

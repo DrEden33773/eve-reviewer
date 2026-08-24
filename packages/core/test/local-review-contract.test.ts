@@ -136,6 +136,63 @@ test("the local review contract rejects object identifiers that contradict their
   });
 });
 
+test("the local review use case rejects base-side changes for an unborn worktree", async () => {
+  let analyzerCalls = 0;
+  const review = createLocalReviewUseCase({
+    clock: () => 0,
+    analyze: async () => {
+      analyzerCalls += 1;
+      return [];
+    },
+  });
+
+  const result = await review.review(
+    {
+      kind: "eve-reviewer.local-review-request",
+      schemaVersion: 1,
+      payload: {
+        subject: {
+          kind: "local-worktree",
+          objectFormat: "sha1",
+          base: { kind: "unborn", tree: "a".repeat(40) },
+          candidateTree: "b".repeat(40),
+          snapshotDigest: `sha256:${"c".repeat(64)}`,
+        },
+        reviewer: "deterministic-security",
+        diff: [
+          "diff --git a/src/value.ts b/src/value.ts",
+          "--- a/src/value.ts",
+          "+++ b/src/value.ts",
+          "@@ -1 +1 @@",
+          "-export const value = input;",
+          "+export const value = eval(input);",
+          "",
+        ].join("\n"),
+        sources: { base: [], head: [] },
+      },
+    },
+    context,
+  );
+
+  assert.deepEqual(
+    { analyzerCalls, result },
+    {
+      analyzerCalls: 0,
+      result: {
+        kind: "eve-reviewer.review-result",
+        schemaVersion: 1,
+        payload: {
+          ok: false,
+          error: {
+            code: "invalid-diff",
+            message: "An unborn local-worktree review cannot contain base-side changes.",
+          },
+        },
+      },
+    },
+  );
+});
+
 test("the local review use case reports against captured worktree identity", async () => {
   const review = createLocalReviewUseCase({
     clock: () => 0,

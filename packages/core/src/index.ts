@@ -650,6 +650,23 @@ type DecodeReviewRequest<TRequest extends ReviewRequestValue> = (
   value: unknown,
 ) => { ok: true; value: TRequest } | { ok: false; error: ContractRejection };
 
+function localDiffConsistencyError(
+  request: ReviewRequestValue,
+  diff: ParsedDiff,
+): { code: "invalid-diff"; message: string } | undefined {
+  if (
+    request.kind === "eve-reviewer.local-review-request" &&
+    request.payload.subject.base.kind === "unborn" &&
+    diff.files.some((file) => file.oldPath !== null)
+  ) {
+    return {
+      code: "invalid-diff",
+      message: "An unborn local-worktree review cannot contain base-side changes.",
+    };
+  }
+  return undefined;
+}
+
 function createReviewUseCaseWithDecoder<TRequest extends ReviewRequestValue>(
   dependencies: {
     analyze: (
@@ -675,6 +692,10 @@ function createReviewUseCaseWithDecoder<TRequest extends ReviewRequestValue>(
       const parsed = parseUnifiedDiff(decoded.value.payload.diff);
       if (!parsed.ok) {
         return versionedReviewFailure(parsed.error);
+      }
+      const localMismatch = localDiffConsistencyError(decoded.value, parsed.diff);
+      if (localMismatch !== undefined) {
+        return versionedReviewFailure(localMismatch);
       }
       const validatedSources = sourceMap(decoded.value.payload.sources, parsed.diff.files, {
         maximumSourceFiles: tightenedLimit(context.limits.maximumSourceFiles, MAX_SOURCE_FILES),
