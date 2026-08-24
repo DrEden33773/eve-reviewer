@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Annotated Eve B2 release tag to stage
+        description: Annotated core release tag to stage
         required: true
         type: string
 
@@ -39,7 +39,7 @@ jobs:
             if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) {
               throw new Error(`Only a supported stable version may be staged: ${manifest.version}`);
             }
-            const expectedTag = `eve-b2-v${manifest.version}`;
+            const expectedTag = `core-v${manifest.version}`;
             if (process.env.RELEASE_TAG !== expectedTag) {
               throw new Error(`Expected ${expectedTag}, received ${process.env.RELEASE_TAG}`);
             }

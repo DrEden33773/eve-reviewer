@@ -1,6 +1,8 @@
 import Type from "typebox";
 import Schema from "typebox/schema";
 
+import { localWorktreeSubjectSchema } from "./local-review-contract.ts";
+
 const maximumDiffCharacters = 1_000_000;
 const maximumSourceCharacters = 1_000_000;
 const maximumSourceFilesPerSide = 100;
@@ -310,7 +312,7 @@ const successfulResultSchema = Type.Object(
         ok: Type.Literal(true),
         report: Type.Object(
           {
-            subject: pullRequestSubjectSchema,
+            subject: Type.Union([pullRequestSubjectSchema, localWorktreeSubjectSchema]),
             reviewer: Type.String({ minLength: 1, maxLength: 128 }),
             summary: Type.String({ minLength: 1, maxLength: 8_192 }),
             risk: Type.Union([

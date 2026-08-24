@@ -13,6 +13,11 @@ export {
   type InMemoryReviewPort,
 } from "./in-memory-adapter.ts";
 export {
+  type DecodeLocalReviewRequestResult,
+  type LocalReviewRequestEnvelope,
+  localReviewContractV1,
+} from "./local-review-contract.ts";
+export {
   type AnalyzerOutcomeEnvelope,
   type ContractIssue,
   type ContractRejection,
@@ -25,8 +30,10 @@ export {
   reviewContractV1,
 } from "./review-contract.ts";
 
+import { type LocalReviewRequestEnvelope, localReviewContractV1 } from "./local-review-contract.ts";
 import {
   type AnalyzerOutcomeEnvelope,
+  type ContractRejection,
   type ReviewRequestEnvelope,
   type ReviewResultEnvelope,
   reviewContractV1,
@@ -466,10 +473,16 @@ function sourceConsistencyError(
   return undefined;
 }
 
-function buildValidatedReportFromParsedDiff(
-  input: Omit<ValidatedReportInput, "diff">,
+type ValidatedReviewEvidence = Omit<ReviewReport, "repository" | "pullRequest">;
+
+type ValidatedReviewEvidenceResult =
+  | { ok: true; report: ValidatedReviewEvidence }
+  | Exclude<ValidatedReportResult, { ok: true }>;
+
+function buildValidatedReviewEvidence(
+  input: Omit<ValidatedReportInput, "repository" | "pullRequest" | "diff">,
   diff: ParsedDiff,
-): ValidatedReportResult {
+): ValidatedReviewEvidenceResult {
   const changedLocations = new Set(
     diff.files.flatMap((file) =>
       file.lines.filter((line) => line.changed).map((line) => locationKey(line.location)),
@@ -525,8 +538,6 @@ function buildValidatedReportFromParsedDiff(
   return {
     ok: true,
     report: {
-      repository: input.repository,
-      pullRequest: input.pullRequest,
       summary: reviewSummary(input.candidates.length, files.length, coverageStatus, risk),
       risk,
       coverage: { status: coverageStatus, files },
@@ -541,18 +552,44 @@ export function buildValidatedReport(input: ValidatedReportInput): ValidatedRepo
   if (!parsed.ok) {
     return parsed;
   }
-  return buildValidatedReportFromParsedDiff(input, parsed.diff);
+  const built = buildValidatedReviewEvidence(input, parsed.diff);
+  if (!built.ok) {
+    return built;
+  }
+  return {
+    ok: true,
+    report: {
+      repository: input.repository,
+      pullRequest: input.pullRequest,
+      ...built.report,
+    },
+  };
 }
 
-export interface AnalyzeReviewInput {
-  subject: ReviewRequestEnvelope["payload"]["subject"];
+export type ReviewSubject =
+  | ReviewRequestEnvelope["payload"]["subject"]
+  | LocalReviewRequestEnvelope["payload"]["subject"];
+
+interface AnalyzeReviewInputFor<TSubject extends ReviewSubject> {
+  subject: TSubject;
   reviewer: string;
   diff: ParsedDiff;
   sources: ReviewSources;
 }
 
+export type AnalyzeReviewInput = AnalyzeReviewInputFor<ReviewRequestEnvelope["payload"]["subject"]>;
+
+export type AnalyzeLocalReviewInput = AnalyzeReviewInputFor<
+  LocalReviewRequestEnvelope["payload"]["subject"]
+>;
+
 export type AnalyzeReview = (
   input: AnalyzeReviewInput,
+  context: AnalyzerContext,
+) => Promise<unknown[]>;
+
+export type AnalyzeLocalReview = (
+  input: AnalyzeLocalReviewInput,
   context: AnalyzerContext,
 ) => Promise<unknown[]>;
 
@@ -607,13 +644,42 @@ function matrixCoverageStatus(
   return analyzed === 0 ? "no-coverage" : "partial";
 }
 
-export function createReviewUseCase(dependencies: {
-  analyze: AnalyzeReview;
-  clock: () => number;
-}): ReviewUseCase {
+type ReviewRequestValue = ReviewRequestEnvelope | LocalReviewRequestEnvelope;
+
+type DecodeReviewRequest<TRequest extends ReviewRequestValue> = (
+  value: unknown,
+) => { ok: true; value: TRequest } | { ok: false; error: ContractRejection };
+
+function localDiffConsistencyError(
+  request: ReviewRequestValue,
+  diff: ParsedDiff,
+): { code: "invalid-diff"; message: string } | undefined {
+  if (
+    request.kind === "eve-reviewer.local-review-request" &&
+    request.payload.subject.base.kind === "unborn" &&
+    diff.files.some((file) => file.oldPath !== null)
+  ) {
+    return {
+      code: "invalid-diff",
+      message: "An unborn local-worktree review cannot contain base-side changes.",
+    };
+  }
+  return undefined;
+}
+
+function createReviewUseCaseWithDecoder<TRequest extends ReviewRequestValue>(
+  dependencies: {
+    analyze: (
+      input: AnalyzeReviewInputFor<TRequest["payload"]["subject"]>,
+      context: AnalyzerContext,
+    ) => Promise<unknown[]>;
+    clock: () => number;
+  },
+  decodeRequest: DecodeReviewRequest<TRequest>,
+): ReviewUseCase {
   return {
     async review(request: unknown, context: AnalyzerContext) {
-      const decoded = reviewContractV1.decodeRequest(request);
+      const decoded = decodeRequest(request);
       if (!decoded.ok) {
         return versionedReviewFailure(decoded.error);
       }
@@ -626,6 +692,10 @@ export function createReviewUseCase(dependencies: {
       const parsed = parseUnifiedDiff(decoded.value.payload.diff);
       if (!parsed.ok) {
         return versionedReviewFailure(parsed.error);
+      }
+      const localMismatch = localDiffConsistencyError(decoded.value, parsed.diff);
+      if (localMismatch !== undefined) {
+        return versionedReviewFailure(localMismatch);
       }
       const validatedSources = sourceMap(decoded.value.payload.sources, parsed.diff.files, {
         maximumSourceFiles: tightenedLimit(context.limits.maximumSourceFiles, MAX_SOURCE_FILES),
@@ -811,15 +881,15 @@ export function createReviewUseCase(dependencies: {
           );
         })
         .map(({ candidate }) => candidate);
-      const built = buildValidatedReport({
-        repository: decoded.value.payload.subject.repository,
-        pullRequest: decoded.value.payload.subject.number,
-        reviewer: decoded.value.payload.reviewer,
-        diff: decoded.value.payload.diff,
-        sources: decoded.value.payload.sources,
-        analyzedFiles,
-        candidates,
-      });
+      const built = buildValidatedReviewEvidence(
+        {
+          reviewer: decoded.value.payload.reviewer,
+          sources: decoded.value.payload.sources,
+          analyzedFiles,
+          candidates,
+        },
+        parsed.diff,
+      );
       if (!built.ok) {
         return versionedReviewFailure(built.error);
       }
@@ -894,4 +964,18 @@ export function createReviewUseCase(dependencies: {
       };
     },
   };
+}
+
+export function createReviewUseCase(dependencies: {
+  analyze: AnalyzeReview;
+  clock: () => number;
+}): ReviewUseCase {
+  return createReviewUseCaseWithDecoder(dependencies, reviewContractV1.decodeRequest);
+}
+
+export function createLocalReviewUseCase(dependencies: {
+  analyze: AnalyzeLocalReview;
+  clock: () => number;
+}): ReviewUseCase {
+  return createReviewUseCaseWithDecoder(dependencies, localReviewContractV1.decodeRequest);
 }

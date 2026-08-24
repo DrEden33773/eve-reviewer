@@ -36,12 +36,12 @@ importers:
   packages/adam-extension:
     dependencies:
       '@eve-reviewer/core':
-        specifier: workspace:0.1.1
+        specifier: workspace:0.2.0
         version: link:../core
     devDependencies:
       '@adam-agent/extension-api':
-        specifier: 0.2.0
-        version: 0.2.0
+        specifier: 0.3.0
+        version: 0.3.0
 
   packages/core:
     dependencies:
@@ -63,8 +63,8 @@ importers:
 
 packages:
 
-  '@adam-agent/extension-api@0.2.0':
-    resolution: {integrity: sha512-UMyt7eYz6wgjM4bWamqAbkOTJuJs6v8UW0UoYcfSQ0CTqqaRJvE+xbrnSGIuphLwpQ/F+HkPF6fiO5mwIqu3Fw==}
+  '@adam-agent/extension-api@0.3.0':
+    resolution: {integrity: sha512-ijWL5/NhP0Gvd0fNJGkfzNoL6MSKmdo48RcQRnTN2GqhcJnnOaFqCBr3iywxekbstPe7wxx5bs59aCI2ETdxWA==}
     engines: {node: '>=24.0.0 <25'}
 
   '@biomejs/biome@2.5.8':
@@ -575,7 +575,7 @@ packages:
 
 snapshots:
 
-  '@adam-agent/extension-api@0.2.0':
+  '@adam-agent/extension-api@0.3.0':
     dependencies:
       semver: 7.8.5
       zod: 4.4.3
