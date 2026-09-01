@@ -18,6 +18,17 @@ export {
   localReviewContractV1,
 } from "./local-review-contract.ts";
 export {
+  createModelReviewFailureOutcome,
+  createModelReviewOutcome,
+  type ModelReviewCandidate,
+  type ModelReviewCandidatesEnvelope,
+  type ModelReviewContractIssue,
+  type ModelReviewContractResult,
+  type ModelReviewOutcomeResult,
+  type ModelReviewRunProvenance,
+  modelReviewCandidatesCodec,
+} from "./model-review-contract.ts";
+export {
   type AnalyzerOutcomeEnvelope,
   type ContractIssue,
   type ContractRejection,
