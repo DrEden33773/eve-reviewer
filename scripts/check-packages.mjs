@@ -155,7 +155,7 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/core",
       publishConfig: { access: "public", provenance: true },
-      version: "0.2.0",
+      version: "0.3.0",
     },
   );
   assert.deepEqual(
@@ -168,12 +168,12 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       version: extension.version,
     },
     {
-      dependencies: { "@eve-reviewer/core": "0.2.0" },
+      dependencies: { "@eve-reviewer/core": "0.3.0" },
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/adam-extension",
-      peerDependencies: { "@adam-agent/extension-api": "0.3.0" },
+      peerDependencies: { "@adam-agent/extension-api": "0.4.0" },
       publishConfig: { access: "public", provenance: true },
-      version: "0.3.0",
+      version: "0.4.0",
     },
   );
 }
@@ -186,7 +186,7 @@ function freshInstall(coreTarball, extensionTarball) {
   );
   const dependencies =
     offlineTarballs.length === 0
-      ? ["@adam-agent/extension-api@0.3.0"]
+      ? ["@adam-agent/extension-api@0.4.0"]
       : ["--offline", ...offlineTarballs];
   command(
     "npm",
@@ -212,7 +212,7 @@ function freshInstall(coreTarball, extensionTarball) {
       [
         'import * as core from "@eve-reviewer/core";',
         'import * as extension from "@eve-reviewer/adam-extension";',
-        'if (typeof core.parseUnifiedDiff !== "function" || typeof core.createReviewUseCase !== "function" || typeof core.createLocalReviewUseCase !== "function" || typeof core.localReviewContractV1?.decodeRequest !== "function") throw new Error("Invalid core root.");',
+        'if (typeof core.parseUnifiedDiff !== "function" || typeof core.createReviewUseCase !== "function" || typeof core.createLocalReviewUseCase !== "function" || typeof core.createModelReviewOutcome !== "function" || typeof core.modelReviewCandidatesCodec?.decode !== "function" || typeof core.localReviewContractV1?.decodeRequest !== "function") throw new Error("Invalid core root.");',
         'if (Object.keys(extension).length !== 1 || typeof extension.activate !== "function") throw new Error("Invalid extension root.");',
       ].join(""),
     ],
@@ -225,5 +225,5 @@ function freshInstall(coreTarball, extensionTarball) {
       "utf8",
     ),
   );
-  assert.deepEqual(installedExtension.dependencies, { "@eve-reviewer/core": "0.2.0" });
+  assert.deepEqual(installedExtension.dependencies, { "@eve-reviewer/core": "0.3.0" });
 }
