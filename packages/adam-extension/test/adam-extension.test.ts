@@ -816,6 +816,9 @@ test("local worktree review maps one Adam snapshot into durable Eve evidence", a
   let artifactBytes: Uint8Array | undefined;
   let evidenceBytes: Uint8Array | undefined;
   let managedInput: unknown;
+  const originalDateNow = Date.now;
+  let now = 1_000;
+  let deadlineAt = new Date(2_000).toISOString();
   const progress: unknown[] = [];
   const effects: string[] = [];
   const provenance = {
@@ -872,6 +875,8 @@ test("local worktree review maps one Adam snapshot into durable Eve evidence", a
         async run(input) {
           effects.push("managed");
           managedInput = input;
+          now = 3_000;
+          deadlineAt = new Date(4_000).toISOString();
           return {
             agentId: "11111111-1111-4111-8111-111111111111",
             attemptId: "22222222-2222-4222-8222-222222222222",
@@ -925,7 +930,9 @@ test("local worktree review maps one Adam snapshot into durable Eve evidence", a
         },
       },
     },
-    deadlineAt: "2099-01-01T00:00:00.000Z",
+    get deadlineAt() {
+      return deadlineAt;
+    },
     diagnostics: [],
     operationId,
     provenance,
@@ -935,7 +942,13 @@ test("local worktree review maps one Adam snapshot into durable Eve evidence", a
     },
   } satisfies ExtensionOperationContext;
 
-  const output = await registration.execute(decoded.value, context);
+  let output: Awaited<ReturnType<typeof registration.execute>>;
+  try {
+    Date.now = () => now;
+    output = await registration.execute(decoded.value, context);
+  } finally {
+    Date.now = originalDateNow;
+  }
 
   assert.ok(artifactBytes);
   assert.ok(evidenceBytes);
@@ -1225,6 +1238,98 @@ test("local worktree review preserves deterministic evidence when managed v2 sta
         "Model review did not complete; verified deterministic evidence is preserved in the failed review result.",
     },
   ]);
+});
+
+test("local worktree review preserves managed v2 cancellation before report effects", async () => {
+  const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
+  const decoded = registration.input.decode(localWorktreeSnapshot("export const value = 1;"));
+  assert.ok(decoded.ok);
+  const effects: string[] = [];
+  const cancellation = new Error("caller cancelled managed review");
+  const controller = new AbortController();
+  const provenance = {
+    contributionId: "eve-reviewer.local-worktree-review@1",
+    extensionId: "eve-reviewer",
+    extensionVersion: "0.5.0",
+    projectId: "sha256:project",
+  } as const;
+  const operationId = "operation-local-review-cancelled";
+  const context = {
+    budget: {
+      inputBytes: 1_024,
+      outputBytesRemaining: 5_000_000,
+      progressBytesRemaining: 1_000_000,
+      progressRecordsRemaining: 256,
+    },
+    capabilities: {
+      "adam.analyzer-execution.biome@1": {
+        async analyze() {
+          effects.push("analyze");
+          return {
+            execution: {
+              analyzer: "biome" as const,
+              analyzerVersion: "2.5.8",
+              exitCode: 0,
+              profile: "adam-biome-recommended-v1" as const,
+              provenance: { ...provenance, operationId },
+            },
+            report: {
+              command: "check",
+              diagnostics: [],
+              summary: { errors: 0, warnings: 0 },
+            },
+          };
+        },
+      },
+      "adam.artifact.publish@1": {
+        async publish(input) {
+          const evidence = input.contract.id === "eve-reviewer.model-review-evidence";
+          effects.push(evidence ? "artifact:evidence" : "artifact:report");
+          return {
+            byteCount: input.bytes.byteLength,
+            contract: input.contract,
+            id: evidence ? "sha256:cancelled-evidence" : "sha256:cancelled-report",
+            mediaType: input.mediaType,
+            provenance: { ...provenance, operationId },
+          };
+        },
+      },
+      "adam.managed-session@2": {
+        async run() {
+          effects.push("managed");
+          controller.abort(cancellation);
+          throw cancellation;
+        },
+      },
+      "adam.storage.records@1": {
+        async create(input) {
+          effects.push("record");
+          return {
+            byteCount: 512,
+            contract: input.contract,
+            digest: "sha256:cancelled-record",
+            key: input.key,
+            provenance: { ...provenance, operationId },
+          };
+        },
+        async get() {
+          return undefined;
+        },
+        async list() {
+          return { records: [] };
+        },
+      },
+    },
+    deadlineAt: "2099-01-01T00:00:00.000Z",
+    diagnostics: [],
+    operationId,
+    provenance,
+    signal: controller.signal,
+    async progress() {},
+  } satisfies ExtensionOperationContext;
+
+  await assert.rejects(registration.execute(decoded.value, context), cancellation);
+  assert.deepEqual(effects, ["analyze", "artifact:evidence", "managed"]);
 });
 
 test("local review rejects base evidence for an unborn snapshot before effects", async () => {
@@ -2171,6 +2276,36 @@ function reviewRequest() {
         head: [{ path: "src/value.ts", content: "export const value = 1;\n" }],
       },
     },
+  } as const;
+}
+
+function localWorktreeSnapshot(content: string) {
+  return {
+    base: { commit: "a".repeat(40), kind: "head", tree: "b".repeat(40) },
+    candidateTree: "c".repeat(40),
+    capturePolicy: { id: "adam.git-project-changes", objectFormat: "sha1", version: 1 },
+    digest: `sha256:${"d".repeat(64)}`,
+    kind: "adam.project-change-snapshot",
+    schemaVersion: 1,
+    sources: [
+      {
+        content: `${content}\n`,
+        contentDigest: `sha256:${"e".repeat(64)}`,
+        mode: "100644",
+        path: "src/value.ts",
+        side: "head",
+      },
+    ],
+    unavailable: [],
+    unifiedDiff: [
+      "diff --git a/src/value.ts b/src/value.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/src/value.ts",
+      "@@ -0,0 +1 @@",
+      `+${content}`,
+      "",
+    ].join("\n"),
   } as const;
 }
 

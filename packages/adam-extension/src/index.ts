@@ -428,7 +428,9 @@ async function executeReviewUseCase(
   });
   const result = await review.review(request, {
     signal: operation.signal,
-    deadline: Date.parse(operation.deadlineAt),
+    get deadline() {
+      return Date.parse(operation.deadlineAt);
+    },
     limits: {
       maximumSourceFiles: EXTENSION_BIOME_MAX_FILES,
       maximumSourceFileBytes: EXTENSION_BIOME_MAX_FILE_BYTES,
@@ -439,6 +441,9 @@ async function executeReviewUseCase(
       terminationGraceMilliseconds: 1_000,
     },
   });
+  if (operation.signal.aborted) {
+    throw operation.signal.reason;
+  }
   const encoded = reviewContractV1.encodeResult(result);
   if (!encoded.ok) {
     throw new Error("Eve produced an invalid review result.");
