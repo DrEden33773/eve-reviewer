@@ -46,7 +46,7 @@ jobs:
             if (manifest.dependencies?.["@eve-reviewer/core"] !== "workspace:0.3.0") {
               throw new Error("The local-review extension must pin its verified core version.");
             }
-            if (manifest.peerDependencies?.["@adam-agent/extension-api"] !== "0.4.0") {
+            if (manifest.peerDependencies?.["@adam-agent/extension-api"] !== "0.5.0") {
               throw new Error("The extension must retain exact Adam API compatibility.");
             }
             if (process.env.GITHUB_OUTPUT === undefined) {

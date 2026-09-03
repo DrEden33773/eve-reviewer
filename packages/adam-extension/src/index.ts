@@ -9,7 +9,7 @@ import {
   EXTENSION_BIOME_MAX_STDERR_BYTES,
   EXTENSION_BIOME_MAX_STDOUT_BYTES,
   EXTENSION_BIOME_PROFILE,
-  EXTENSION_MANAGED_SESSION_CAPABILITY_ID,
+  EXTENSION_MANAGED_SESSION_V2_CAPABILITY_ID,
   EXTENSION_RECORDS_CAPABILITY_ID,
   type ExtensionActivationContext,
   type ExtensionArtifactSummary,
@@ -17,7 +17,7 @@ import {
   type ExtensionContractCodec,
   type ExtensionContractResult,
   type ExtensionJsonValue,
-  type ExtensionManagedSessionCapability,
+  type ExtensionManagedSessionV2Capability,
   type ExtensionOperationContext,
   type ExtensionOperationReconciliationContext,
   type ExtensionOperationReconciliationResult,
@@ -428,7 +428,9 @@ async function executeReviewUseCase(
   });
   const result = await review.review(request, {
     signal: operation.signal,
-    deadline: Date.parse(operation.deadlineAt),
+    get deadline() {
+      return Date.parse(operation.deadlineAt);
+    },
     limits: {
       maximumSourceFiles: EXTENSION_BIOME_MAX_FILES,
       maximumSourceFileBytes: EXTENSION_BIOME_MAX_FILE_BYTES,
@@ -439,6 +441,9 @@ async function executeReviewUseCase(
       terminationGraceMilliseconds: 1_000,
     },
   });
+  if (operation.signal.aborted) {
+    throw operation.signal.reason;
+  }
   const encoded = reviewContractV1.encodeResult(result);
   if (!encoded.ok) {
     throw new Error("Eve produced an invalid review result.");
@@ -538,21 +543,14 @@ async function executeLocalReview(request: unknown, operation: ExtensionOperatio
           operation,
           taskBytes.byteLength,
         );
-        const managed = requiredCapability<ExtensionManagedSessionCapability>(
-          operation.capabilities[EXTENSION_MANAGED_SESSION_CAPABILITY_ID],
-          EXTENSION_MANAGED_SESSION_CAPABILITY_ID,
+        const managed = requiredCapability<ExtensionManagedSessionV2Capability>(
+          operation.capabilities[EXTENSION_MANAGED_SESSION_V2_CAPABILITY_ID],
+          EXTENSION_MANAGED_SESSION_V2_CAPABILITY_ID,
         );
         try {
           const terminal = await managed.run({
             evidence: [{ type: "artifact", artifact: evidence }],
-            limits: {
-              deadlineMilliseconds: Math.min(
-                30_000,
-                Math.max(1, Date.parse(operation.deadlineAt) - Date.now()),
-              ),
-              maximumCumulativeTokens: 32_000,
-              maximumTurns: 4,
-            },
+            limits: { maximumCumulativeTokens: 32_000 },
             managedRole: modelManagedRole,
             output: {
               id: modelReviewCandidatesCodec.id,
@@ -562,6 +560,9 @@ async function executeLocalReview(request: unknown, operation: ExtensionOperatio
             selectedSkills: [],
             task,
           });
+          if (terminal.status === "failed") {
+            return [...deterministic, createModelReviewFailureOutcome(reviewRequest)];
+          }
           const { result, status: _status, ...run } = terminal;
           const model = createModelReviewOutcome({
             request: reviewRequest,
