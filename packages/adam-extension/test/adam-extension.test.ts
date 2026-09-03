@@ -1385,7 +1385,9 @@ test("local worktree review preserves managed v2 cancellation before report effe
     async progress() {},
   } satisfies ExtensionOperationContext;
 
-  await assert.rejects(registration.execute(decoded.value, context), cancellation);
+  await assert.rejects(async () => {
+    await registration.execute(decoded.value, context);
+  }, cancellation);
   assert.deepEqual(effects, ["analyze", "artifact:evidence", "managed"]);
 });
 
