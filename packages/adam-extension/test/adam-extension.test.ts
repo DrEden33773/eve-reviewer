@@ -1242,7 +1242,33 @@ test("local worktree review preserves deterministic evidence when managed v2 sta
 
 test("local worktree review preserves managed v2 cancellation before report effects", async () => {
   const registration = registeredReviewOperation("eve-reviewer.local-worktree-review@1");
-  const decoded = registration.input.decode(localWorktreeSnapshot("export const value = 1;"));
+  const decoded = registration.input.decode({
+    base: { commit: "a".repeat(40), kind: "head", tree: "b".repeat(40) },
+    candidateTree: "c".repeat(40),
+    capturePolicy: { id: "adam.git-project-changes", objectFormat: "sha1", version: 1 },
+    digest: `sha256:${"d".repeat(64)}`,
+    kind: "adam.project-change-snapshot",
+    schemaVersion: 1,
+    sources: [
+      {
+        content: "export const value = 1;\n",
+        contentDigest: `sha256:${"e".repeat(64)}`,
+        mode: "100644",
+        path: "src/value.ts",
+        side: "head",
+      },
+    ],
+    unavailable: [],
+    unifiedDiff: [
+      "diff --git a/src/value.ts b/src/value.ts",
+      "new file mode 100644",
+      "--- /dev/null",
+      "+++ b/src/value.ts",
+      "@@ -0,0 +1 @@",
+      "+export const value = 1;",
+      "",
+    ].join("\n"),
+  });
   assert.ok(decoded.ok);
   const effects: string[] = [];
   const cancellation = new Error("caller cancelled managed review");
@@ -1298,7 +1324,38 @@ test("local worktree review preserves managed v2 cancellation before report effe
         async run() {
           effects.push("managed");
           controller.abort(cancellation);
-          throw cancellation;
+          return {
+            agentId: "11111111-1111-4111-8111-111111111111",
+            attemptId: "22222222-2222-4222-8222-222222222222",
+            cost: { status: "unavailable" as const },
+            profile: {
+              id: "reviewer.v1" as const,
+              version: 1 as const,
+              digest: `sha256:${"a".repeat(64)}` as const,
+              selectedSkillsDigest:
+                "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" as const,
+            },
+            result: {
+              kind: "eve-reviewer.model-review-candidates",
+              schemaVersion: 1,
+              payload: { candidates: [] },
+            },
+            status: "completed" as const,
+            target: {
+              targetId: "fixture.review.direct",
+              vendor: "fixture",
+              modelId: "review-model",
+              route: "direct" as const,
+              profileVersion: 1,
+              certification: "certified" as const,
+            },
+            transcript: {
+              sessionId: "33333333-3333-4333-8333-333333333333",
+              digest: `sha256:${"c".repeat(64)}` as const,
+              throughSequence: 8,
+            },
+            usage: { inputTokens: 21, outputTokens: 7, reasoningTokens: 0, turns: 1 },
+          };
         },
       },
       "adam.storage.records@1": {
@@ -2276,36 +2333,6 @@ function reviewRequest() {
         head: [{ path: "src/value.ts", content: "export const value = 1;\n" }],
       },
     },
-  } as const;
-}
-
-function localWorktreeSnapshot(content: string) {
-  return {
-    base: { commit: "a".repeat(40), kind: "head", tree: "b".repeat(40) },
-    candidateTree: "c".repeat(40),
-    capturePolicy: { id: "adam.git-project-changes", objectFormat: "sha1", version: 1 },
-    digest: `sha256:${"d".repeat(64)}`,
-    kind: "adam.project-change-snapshot",
-    schemaVersion: 1,
-    sources: [
-      {
-        content: `${content}\n`,
-        contentDigest: `sha256:${"e".repeat(64)}`,
-        mode: "100644",
-        path: "src/value.ts",
-        side: "head",
-      },
-    ],
-    unavailable: [],
-    unifiedDiff: [
-      "diff --git a/src/value.ts b/src/value.ts",
-      "new file mode 100644",
-      "--- /dev/null",
-      "+++ b/src/value.ts",
-      "@@ -0,0 +1 @@",
-      `+${content}`,
-      "",
-    ].join("\n"),
   } as const;
 }
 
