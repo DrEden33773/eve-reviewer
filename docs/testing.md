@@ -32,9 +32,11 @@ Timeouts are bounded failure and cleanup guards that identify the missing state 
 
 A child `error` reports failure; only `close` establishes process and stream reclamation. Track child ownership through close and bound cleanup through TERM then KILL where needed. Consume background cleanup failures. Tests own their temporary resources and relevant inherited environment for their complete lifetime; restore any changed state.
 
+The CLI signal suite starts a controlled real external analyzer through a test-only Node preload at the child-process boundary. The analyzer stays alive on IPC, reports readiness from inside the child, and is reclaimed by the real Eve executor after the real CLI receives SIGINT or SIGTERM. The suite checks analyzer close, CLI output/exit and directory cleanup with a one-line diff. Separate local-Biome tests retain pinned-binary execution and real process cancellation coverage.
+
 ## Commands and final checks
 
-With current package output, run a focused file using `node --test <test-file>` or a focused case using `node --test --test-name-pattern='<name>' <test-file>`. Run `pnpm build` first when package source changed or generated output may be stale. The current `pnpm test` builds and runs the complete suite; appending a path does not replace its default file list.
+Run `pnpm test <test-file> [more test files]` for one build followed by only those files. Add `-t '<name>'` (or `--name '<name>'`) to select cases. With no file selection, `pnpm test` runs the complete suite. When package output is already current, `pnpm test:run <test-file>` skips the build; final Quality uses that entry after typecheck has refreshed package output. The runner preserves Node test isolation and propagates failures.
 
 Review the complete candidate diff against the request and engineering rules. Run `pnpm quality:check` once on the final candidate before its pull request and require hosted `quality` before merge. Subsequent product edits require a new full candidate check. An unchanged successful candidate needs no routine repeat unless an explicit gate or new evidence requires it.
 
