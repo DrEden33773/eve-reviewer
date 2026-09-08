@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity/useLiteralKeys: Runtime validation intentionally narrows unknown records by exact dynamic keys.
+import { createHash } from "node:crypto";
 import Type from "typebox";
 import Schema from "typebox/schema";
 import type { LocalReviewRequestEnvelope } from "./local-review-contract.ts";
@@ -9,7 +10,7 @@ import {
 } from "./review-contract.ts";
 import { parseUnifiedDiff } from "./unified-diff.ts";
 
-const maximumEnvelopeBytes = 1_000_000;
+const maximumEnvelopeBytes = 1_048_576;
 
 const locationSchema = Type.Object(
   {
@@ -178,14 +179,8 @@ export const modelReviewCandidatesCodec = Object.freeze({
 });
 
 export interface ModelReviewRunProvenance {
-  readonly agentId: string;
-  readonly attemptId: string;
-  readonly profile: {
-    readonly id: "reviewer.v1";
-    readonly version: 1;
-    readonly digest: `sha256:${string}`;
-    readonly selectedSkillsDigest: `sha256:${string}`;
-  };
+  readonly reviewRunId: string;
+  readonly policyDigest: `sha256:${string}`;
   readonly target: {
     readonly targetId: string;
     readonly vendor: string;
@@ -195,18 +190,19 @@ export interface ModelReviewRunProvenance {
     readonly certification: "certified" | "experimental";
     readonly upstreamProviderId?: string;
   };
-  readonly transcript: {
-    readonly sessionId: string;
+  readonly evidenceSetDigest: `sha256:${string}`;
+  readonly output: {
+    readonly contract: { readonly id: "eve-reviewer.model-review-candidates"; readonly version: 1 };
     readonly digest: `sha256:${string}`;
-    readonly throughSequence: number;
+    readonly byteCount: number;
   };
+  readonly traceDigest: `sha256:${string}`;
   readonly usage: {
     readonly inputTokens: number;
     readonly outputTokens: number;
     readonly reasoningTokens: number;
     readonly turns: number;
   };
-  readonly cost: { readonly status: "unavailable" };
 }
 
 export type ModelReviewOutcomeResult =
@@ -299,6 +295,20 @@ export function createModelReviewOutcome(input: {
   }
   const decoded = modelReviewCandidatesCodec.decode(input.envelope);
   if (!decoded.ok) return invalidEvidence;
+  const serialized = JSON.stringify(decoded.value);
+  if (
+    input.run.output.byteCount !== Buffer.byteLength(serialized, "utf8") ||
+    input.run.output.digest !==
+      `sha256:${createHash("sha256").update(serialized, "utf8").digest("hex")}`
+  ) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid-model-run",
+        message: "The model review output does not match its receipt.",
+      },
+    };
+  }
   const parsed = parseUnifiedDiff(input.request.payload.diff);
   if (!parsed.ok) return invalidEvidence;
   const changed = new Map(
@@ -430,7 +440,9 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 function isUuid(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value)
+    /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/u.test(
+      value,
+    )
   );
 }
 
@@ -443,88 +455,61 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function isValidModelRun(value: unknown): value is ModelReviewRunProvenance {
-  if (!isRecord(value)) return false;
-  const profile = value["profile"];
-  const target = value["target"];
-  const transcript = value["transcript"];
-  const usage = value["usage"];
-  const cost = value["cost"];
   if (
+    !isRecord(value) ||
     !exactKeys(value, [
-      "agentId",
-      "attemptId",
-      "cost",
-      "profile",
+      "reviewRunId",
+      "policyDigest",
       "target",
-      "transcript",
+      "evidenceSetDigest",
+      "output",
+      "traceDigest",
       "usage",
-    ]) ||
-    !isUuid(value["agentId"]) ||
-    !isUuid(value["attemptId"]) ||
-    !isRecord(profile) ||
-    !exactKeys(profile, ["digest", "id", "selectedSkillsDigest", "version"]) ||
-    profile["id"] !== "reviewer.v1" ||
-    profile["version"] !== 1 ||
-    !isDigest(profile["digest"]) ||
-    profile["selectedSkillsDigest"] !==
-      "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" ||
-    !isRecord(target) ||
-    !Object.keys(target).every((key) =>
-      [
-        "certification",
-        "modelId",
-        "profileVersion",
-        "route",
-        "targetId",
-        "upstreamProviderId",
-        "vendor",
-      ].includes(key),
-    ) ||
-    !["certification", "modelId", "profileVersion", "route", "targetId", "vendor"].every((key) =>
-      Object.hasOwn(target, key),
-    ) ||
-    (target["certification"] !== "certified" && target["certification"] !== "experimental") ||
-    typeof target["modelId"] !== "string" ||
-    target["modelId"].length === 0 ||
-    target["modelId"].length > 256 ||
-    !Number.isSafeInteger(target["profileVersion"]) ||
-    Number(target["profileVersion"]) <= 0 ||
-    (target["route"] !== "direct" && target["route"] !== "vercel-ai-gateway") ||
-    typeof target["targetId"] !== "string" ||
-    target["targetId"].length === 0 ||
-    target["targetId"].length > 256 ||
-    typeof target["vendor"] !== "string" ||
-    target["vendor"].length === 0 ||
-    target["vendor"].length > 128 ||
-    (target["upstreamProviderId"] !== undefined &&
-      (typeof target["upstreamProviderId"] !== "string" ||
-        target["upstreamProviderId"].length === 0)) ||
-    (typeof target["upstreamProviderId"] === "string" &&
-      target["upstreamProviderId"].length > 128) ||
-    (target["route"] === "vercel-ai-gateway" && target["upstreamProviderId"] === undefined) ||
-    (target["route"] === "direct" && target["upstreamProviderId"] !== undefined) ||
-    !isRecord(transcript) ||
-    !exactKeys(transcript, ["digest", "sessionId", "throughSequence"]) ||
-    !isDigest(transcript["digest"]) ||
-    !isUuid(transcript["sessionId"]) ||
-    !isNonNegativeInteger(transcript["throughSequence"]) ||
-    transcript["throughSequence"] === 0 ||
-    !isRecord(usage) ||
-    !exactKeys(usage, ["inputTokens", "outputTokens", "reasoningTokens", "turns"]) ||
-    !isNonNegativeInteger(usage["inputTokens"]) ||
-    !isNonNegativeInteger(usage["outputTokens"]) ||
-    !isNonNegativeInteger(usage["reasoningTokens"]) ||
-    !isNonNegativeInteger(usage["turns"]) ||
-    usage["turns"] === 0 ||
-    usage["turns"] > 4 ||
-    usage["inputTokens"] + usage["outputTokens"] > 32_000 ||
-    !isRecord(cost) ||
-    !exactKeys(cost, ["status"]) ||
-    cost["status"] !== "unavailable"
-  ) {
+    ])
+  )
     return false;
-  }
-  return true;
+  const { target, output, usage } = value;
+  const text = (value: unknown) =>
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.isWellFormed() &&
+    Buffer.byteLength(value, "utf8") <= 256;
+  return (
+    isUuid(value["reviewRunId"]) &&
+    isDigest(value["policyDigest"]) &&
+    isDigest(value["evidenceSetDigest"]) &&
+    isDigest(value["traceDigest"]) &&
+    isRecord(target) &&
+    exactKeys(target, [
+      "targetId",
+      "vendor",
+      "modelId",
+      "route",
+      "profileVersion",
+      "certification",
+      ...(Object.hasOwn(target, "upstreamProviderId") ? ["upstreamProviderId"] : []),
+    ]) &&
+    text(target["targetId"]) &&
+    text(target["vendor"]) &&
+    text(target["modelId"]) &&
+    (target["route"] === "direct" || target["route"] === "vercel-ai-gateway") &&
+    (target["certification"] === "certified" || target["certification"] === "experimental") &&
+    isNonNegativeInteger(target["profileVersion"]) &&
+    target["profileVersion"] > 0 &&
+    (!Object.hasOwn(target, "upstreamProviderId") || text(target["upstreamProviderId"])) &&
+    isRecord(output) &&
+    exactKeys(output, ["contract", "digest", "byteCount"]) &&
+    isRecord(output["contract"]) &&
+    exactKeys(output["contract"], ["id", "version"]) &&
+    output["contract"]["id"] === "eve-reviewer.model-review-candidates" &&
+    output["contract"]["version"] === 1 &&
+    isDigest(output["digest"]) &&
+    isNonNegativeInteger(output["byteCount"]) &&
+    output["byteCount"] <= 1_048_576 &&
+    isRecord(usage) &&
+    exactKeys(usage, ["inputTokens", "outputTokens", "reasoningTokens", "turns"]) &&
+    Object.values(usage).every(isNonNegativeInteger)
+  );
 }
 
 export function createModelReviewFailureOutcome(
