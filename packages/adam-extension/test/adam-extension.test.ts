@@ -82,7 +82,7 @@ test("the supported extension artifact pins the matching core with provenance en
         ".": { types: "./dist/index.d.ts", default: "./dist/index.js" },
       },
       files: ["dist", "LICENSE", "README.md"],
-      dependencies: { "@eve-reviewer/core": "workspace:0.3.0" },
+      dependencies: { "@eve-reviewer/core": "0.3.0" },
       peerDependencies: { "@adam-agent/extension-api": "0.5.0" },
       devDependencies: { "@adam-agent/extension-api": "0.5.0" },
       publishConfig: { access: "public", provenance: true },

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
@@ -8,6 +9,34 @@ import {
   modelReviewCandidatesCodec,
   type ReviewRequestEnvelope,
 } from "../src/index.ts";
+
+function receiptFor(candidates: readonly unknown[]) {
+  const bytes = JSON.stringify({
+    kind: "eve-reviewer.model-review-candidates",
+    schemaVersion: 1,
+    payload: { candidates },
+  });
+  return {
+    reviewRunId: "11111111-1111-4111-8111-111111111111",
+    policyDigest: `sha256:${"a".repeat(64)}` as const,
+    target: {
+      targetId: "fixture.review",
+      vendor: "fixture",
+      modelId: "review-model",
+      route: "direct",
+      profileVersion: 1,
+      certification: "certified",
+    } as const,
+    evidenceSetDigest: `sha256:${"b".repeat(64)}` as const,
+    output: {
+      contract: { id: "eve-reviewer.model-review-candidates", version: 1 } as const,
+      digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` as const,
+      byteCount: Buffer.byteLength(bytes),
+    },
+    traceDigest: `sha256:${"c".repeat(64)}` as const,
+    usage: { inputTokens: 21, outputTokens: 7, reasoningTokens: 0, turns: 1 },
+  };
+}
 
 test("the model-review candidate codec rejects trusted fields and accepts one bounded changed-line candidate", () => {
   const candidate = {
@@ -63,32 +92,7 @@ test("empty model candidates preserve deterministic coverage and model failure p
       },
     },
   };
-  const run = {
-    agentId: "11111111-1111-4111-8111-111111111111",
-    attemptId: "22222222-2222-4222-8222-222222222222",
-    profile: {
-      id: "reviewer.v1",
-      version: 1,
-      digest: `sha256:${"a".repeat(64)}`,
-      selectedSkillsDigest:
-        "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    },
-    target: {
-      targetId: "fixture.review.direct",
-      vendor: "fixture",
-      modelId: "review-model",
-      route: "direct",
-      profileVersion: 1,
-      certification: "certified",
-    },
-    transcript: {
-      sessionId: "33333333-3333-4333-8333-333333333333",
-      digest: `sha256:${"c".repeat(64)}`,
-      throughSequence: 8,
-    },
-    usage: { inputTokens: 21, outputTokens: 7, reasoningTokens: 0, turns: 1 },
-    cost: { status: "unavailable" },
-  } as const;
+  const run = receiptFor([]);
   const deterministic = {
     kind: "eve-reviewer.analyzer-outcome",
     schemaVersion: 1,
@@ -165,7 +169,7 @@ test("empty model candidates preserve deterministic coverage and model failure p
   ]);
 });
 
-test("model review rejects forged managed-run provenance before composition", () => {
+test("model review rejects legacy managed-session provenance before composition", () => {
   const result = createModelReviewOutcome({
     request: {
       kind: "eve-reviewer.review-request",
@@ -269,32 +273,7 @@ test("the existing review use case composes deterministic and model findings wit
       schemaVersion: 1,
       payload: { candidates: [duplicate] },
     },
-    run: {
-      agentId: "11111111-1111-4111-8111-111111111111",
-      attemptId: "22222222-2222-4222-8222-222222222222",
-      profile: {
-        id: "reviewer.v1",
-        version: 1,
-        digest: `sha256:${"a".repeat(64)}`,
-        selectedSkillsDigest:
-          "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      },
-      target: {
-        targetId: "fixture.review.direct",
-        vendor: "fixture",
-        modelId: "review-model",
-        route: "direct",
-        profileVersion: 1,
-        certification: "certified",
-      },
-      transcript: {
-        sessionId: "33333333-3333-4333-8333-333333333333",
-        digest: `sha256:${"c".repeat(64)}`,
-        throughSequence: 8,
-      },
-      usage: { inputTokens: 21, outputTokens: 7, reasoningTokens: 0, turns: 1 },
-      cost: { status: "unavailable" },
-    },
+    run: receiptFor([duplicate]),
   });
   assert.equal(model.ok, true);
   if (!model.ok) throw new Error("The literal model outcome must be valid.");
@@ -382,32 +361,6 @@ test("model review attaches code-owned provenance and extracts only changed-line
       },
     },
   };
-  const run = {
-    agentId: "11111111-1111-4111-8111-111111111111",
-    attemptId: "22222222-2222-4222-8222-222222222222",
-    profile: {
-      id: "reviewer.v1",
-      version: 1,
-      digest: `sha256:${"a".repeat(64)}`,
-      selectedSkillsDigest:
-        "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-    },
-    target: {
-      targetId: "fixture.review.direct",
-      vendor: "fixture",
-      modelId: "review-model",
-      route: "direct",
-      profileVersion: 1,
-      certification: "certified",
-    },
-    transcript: {
-      sessionId: "33333333-3333-4333-8333-333333333333",
-      digest: `sha256:${"c".repeat(64)}`,
-      throughSequence: 8,
-    },
-    usage: { inputTokens: 21, outputTokens: 7, reasoningTokens: 0, turns: 1 },
-    cost: { status: "unavailable" },
-  } as const;
   const envelope = {
     kind: "eve-reviewer.model-review-candidates",
     schemaVersion: 1,
@@ -427,6 +380,7 @@ test("model review attaches code-owned provenance and extracts only changed-line
     },
   } as const;
 
+  const run = receiptFor(envelope.payload.candidates);
   assert.deepEqual(createModelReviewOutcome({ request, envelope, run }), {
     ok: true,
     value: {
@@ -473,7 +427,12 @@ test("model review attaches code-owned provenance and extracts only changed-line
   assert.deepEqual(
     createModelReviewOutcome({
       request,
-      run,
+      run: receiptFor([
+        {
+          ...envelope.payload.candidates[0],
+          location: { side: "new", path: "src/evaluate.ts", line: 1 },
+        },
+      ]),
       envelope: {
         ...envelope,
         payload: {

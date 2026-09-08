@@ -155,7 +155,7 @@ function checkPackedManifests(coreTarball, extensionTarball) {
       exports: { ".": { default: "./dist/index.js", types: "./dist/index.d.ts" } },
       name: "@eve-reviewer/core",
       publishConfig: { access: "public", provenance: true },
-      version: "0.3.0",
+      version: "0.4.0",
     },
   );
   assert.deepEqual(
