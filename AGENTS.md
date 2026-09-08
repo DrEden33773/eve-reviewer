@@ -48,7 +48,7 @@ Optimize for correct side-aware evidence, truthful analyzer coverage, bounded ex
 
 ## Model review and effects
 
-- Model-assisted review uses Adam's narrowed managed-session capability. Eve owns reviewer prompts/recipes, structured candidate parsing, evidence validation and report integration.
+- Model-assisted review uses Adam's purpose-specific managed-review capability. Eve owns reviewer prompts/recipes, structured candidate parsing, evidence validation and report integration.
 - Never receive provider credentials, raw `ModelDriver`, unrestricted `AgentSession` or a second general Agent loop.
 - GitHub input and publication use host-brokered authenticated capabilities. Eve owns review-specific mapping and comment/fix semantics, not secrets or unrestricted network access.
 - Complete and verify review-comment publication before enabling a separate draft-fix capability.

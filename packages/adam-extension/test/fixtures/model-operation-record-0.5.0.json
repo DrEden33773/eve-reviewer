@@ -1,0 +1,84 @@
+{
+  "kind": "eve-reviewer.operation-record",
+  "schemaVersion": 1,
+  "artifact": {
+    "contract": {
+      "id": "eve-reviewer.review-result",
+      "version": 1
+    },
+    "id": "sha256:local-report"
+  },
+  "result": {
+    "kind": "eve-reviewer.review-result",
+    "payload": {
+      "ok": true,
+      "report": {
+        "analyzers": [
+          {
+            "profile": "adam-biome-recommended-v1",
+            "rules": ["lint/security/noGlobalEval"],
+            "tool": "biome",
+            "version": "2.5.8"
+          },
+          {
+            "profile": "eve-model-review.v1",
+            "rules": ["eve-model-review.v1"],
+            "tool": "eve-model-review",
+            "version": "1"
+          }
+        ],
+        "coverage": {
+          "files": [
+            {
+              "analyses": [
+                {
+                  "analyzer": {
+                    "profile": "adam-biome-recommended-v1",
+                    "rules": ["lint/security/noGlobalEval"],
+                    "tool": "biome",
+                    "version": "2.5.8"
+                  },
+                  "side": "new",
+                  "status": "analyzed"
+                },
+                {
+                  "analyzer": {
+                    "profile": "eve-model-review.v1",
+                    "rules": ["eve-model-review.v1"],
+                    "tool": "eve-model-review",
+                    "version": "1"
+                  },
+                  "side": "new",
+                  "status": "analyzed"
+                }
+              ],
+              "baseSource": "not-applicable",
+              "headSource": "available",
+              "newPath": "src/value.ts",
+              "oldPath": null,
+              "status": "added"
+            }
+          ],
+          "status": "complete"
+        },
+        "diagnostics": [],
+        "findings": [],
+        "reviewer": "deterministic-security",
+        "risk": "none",
+        "subject": {
+          "base": {
+            "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "head",
+            "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "candidateTree": "cccccccccccccccccccccccccccccccccccccccc",
+          "kind": "local-worktree",
+          "objectFormat": "sha1",
+          "snapshotDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "summary": "0 findings across 1 changed file; coverage: complete; highest severity: none."
+      }
+    },
+    "schemaVersion": 1
+  }
+}
